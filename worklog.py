@@ -322,22 +322,26 @@ class DummyRightNow( Task ):
 
 class Worklog( MutableSequence ):
     def __init__( self, when = None ):
-        if when is None:
-            self.when = date.today()
-        elif isinstance( when, str ):
-            self.when = datetime.strptime( when, '%Y-%m-%d' ).date()
-        else:
-            self.when = date
-
+        self.when = datetime.today()
+        self._set_when(when)
         self.persist_path = os.path.expanduser( '~/.worklog/{}-2.json'.format( self.when.strftime( '%F' ) ) )
+        self.store = list()
 
+    def _set_when(self, when):
+        """ figure out the time context of this worklog. """
+        if isinstance( when, str ):
+            if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
+                self.when = datetime.strptime( when, '%Y-%m-%d' ).date()
+            else:
+                self.when = datetime.today()+timedelta(days=int(when))
+
+    def _load_persistence(self):
+        """ Load the cache file for this worklog. """
         try:
             with open( self.persist_path, 'r' ) as json_file:
                 self.store = json.load( json_file, object_hook = dict_to_object )
         except IOError as err:
-            if err.errno == errno.ENOENT:
-                self.store = list()
-            else:
+            if err.errno != errno.ENOENT:
                 raise
 
     def __getitem__( self, *args ):
@@ -545,8 +549,6 @@ def report( worklog ):
 def on_report( args ):
     worklog = parse_common_args( args )
     report( worklog )
-
-
 
 
 def main():
