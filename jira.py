@@ -1,8 +1,17 @@
+
 import jira.client
 
-from wlconfig import ConfigException
+from worklog.config import ConfigError
 
-class JiraLog:
+O_ME = "assignee = currentUser()"
+C_ME = "reporter = currentUser()"
+JQL_STATUS = "status = {}"
+JQL_RESOLUTION = "resolution = {}"
+JQL_PROGRESS = "progress = {}"
+TODAY = "today"
+TOMORROW = "tomorrow"
+
+class Jira:
     """
 
     Configs:
@@ -32,16 +41,16 @@ class JiraLog:
         """ initialize an OAuth session. """
         try:
             key_cert_data = None
-        with open(self.conf.jira_key_cert_file, 'r') as key_cert_file:
-            key_cert_data = key_cert_file.read()
-        self.oauth_dict = {
-            'access_token': self.conf.jira_oauth_token,
-            'access_token_secret': self.conf.jira_oauth_secret,
-            'consumer_key': self.conf.jira_oauth_consumer_key,
-            'key_cert': key_cert_data
-        }
+            with open(self.conf.jira_key_cert_file, 'r') as key_cert_file:
+                key_cert_data = key_cert_file.read()
+            self.oauth_dict = {
+                'access_token': self.conf.jira_oauth_token,
+                'access_token_secret': self.conf.jira_oauth_secret,
+                'consumer_key': self.conf.jira_oauth_consumer_key,
+                'key_cert': key_cert_data
+                }
         except AttributeError as excp:
-            raise ConfigException("OAuth information ([jira]->(oauth_token, oauth_secret, oauth_consumer_key, key_cert_file)) needs to be included in the configuration file. The values for the config items can be obtained by using jirashell which is part of python-jira.")
+            raise ConfigError("OAuth information ([jira]->(oauth_token, oauth_secret, oauth_consumer_key, key_cert_file)) needs to be included in the configuration file. The values for the config items can be obtained by using jirashell which is part of python-jira.")
 
     def _init_basic_auth(self):
         """ Inititalize basic auth. """
@@ -49,7 +58,7 @@ class JiraLog:
         try:
             self._basic_auth = (self.conf.jira_username, self.conf.jira_password)
         except AttributeError as excp:
-            raise ConfigException("Authentication information ([jira]->(username, password)) needs to be included in the configuration file. OAuth is recommended instead of basic auth.")
+            raise ConfigError("Authentication information ([jira]->(username, password)) needs to be included in the configuration file. OAuth is recommended instead of basic auth.")
 
     def tickets(self, owner=O_ME, state=ticket_state.INPROGRESS, project=None, sprint=None):
         """ List tickets matching the criteria passed as kwargs. """ 
@@ -57,6 +66,7 @@ class JiraLog:
 
     def worklog(self, start=TODAY, stop=TOMORROW, project=None, sprint=None, ticket=None):
         """ List work logged in the time starting `start` and ending `stop` that matches the attributes passed as kwargs. """
+
         pass
 
     def submit_work(self, **kwargs):
@@ -80,4 +90,4 @@ class JiraLog:
         #   submit_work()
         pass
 
-    
+
