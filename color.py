@@ -1,4 +1,6 @@
 
+ENABLED = True
+
 RESET = 0
 RESET_ENCODED = '\033[0m'
 
@@ -32,17 +34,17 @@ WHITE = 7
 DEFAULT = 9
 
 
-def color_enabled():
+def ENABLED:
     return True
 
 
 def encode( *values ):
-    if not color_enabled(): return ''
+    if not ENABLED: return ''
     return '\033[{}m'.format( ';'.join( map( str, values ) ) )
 
 
 def build( before, value, after ):
-    if not color_enabled(): return value
+    if not ENABLED: return value
     return '{}{}{}'.format( encode( *before ), value, encode( *after ) )
 
 
@@ -67,37 +69,37 @@ def vbuild( *values ):
 
 
 def bold( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( BOLD_ON, str( s ), BOLD_OFF )
 
 
 def faint( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( FAINT_ON, str( s ), FAINT_OFF )
 
 
 def italic( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( ITALIC_ON, str( s ), ITALIC_OFF )
 
 
 def underline( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( UNDERLINE_ON, str( s ), UNDERLINE_OFF )
 
 
 def inverse( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( INVERSE_ON, str( s ), INVERSE_OFF )
 
 
 def strike( s ):
-    if not color_enabled(): return s
+    if not ENABLED: return s
     return vbuild( STRIKE_ON, str( s ), STRIKE_OFF )
 
 
 def colorize( value, fg = None, bg = None, intense = False, bold = False, faint = False, italic = False, underline = False, inverse = False, strike = False ):
-    if not color_enabled():
+    if not ENABLED:
         return value
     if bold and faint:
         raise ValueError( 'Values `bold` and `faint` are mutually exclusive.' )
