@@ -3,14 +3,17 @@ _worklog(){
 	local options
 
 	case "${COMP_WORDS[1]}" in
-		start|stop|resume)
+		start)
+			options="--ago --at --day --ticket"
+			;;
+		stop|resume)
 			options="--ago --at --day"
 			;;
-		report)
+		report|upload)
 			options="--day"
 			;;
 		*)
-			options="start stop resume report"
+			options="start stop resume report upload"
 			;;
 	esac
 
