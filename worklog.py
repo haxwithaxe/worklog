@@ -13,6 +13,7 @@ import re
 import textwrap
 
 import color
+from config import ConfigFile
 
 class Abort( Exception ):
     pass
@@ -68,40 +69,6 @@ def resolve_at_or_ago( args, date ):
         return now()
 
 
-class Config:
-
-    def __init__( self, values, defaults, name = None ):
-        self._values = values
-        self._defaults = defaults or {}
-        self.name = name
-
-    def __getattr__( self, attr ):
-        if attr in self._values:
-            if isinstance( self._values, list ):
-                return self._values[self._values.index( attr )]
-            if isinstance( self._values, dict ):
-                if isinstance( self._values[attr], dict ):
-                    return Config( self._values[attr], self._defaults.get( attr ) )
-            return self._values[attr]
-        elif self._defaults and attr in self._defaults:
-            return self._defaults[attr]
-        elif hasattr( self._values, attr ):
-            return getattr( self._values, attr )
-        raise AttributeError( 'Configuration section "{}" not found'.format( attr ) )
-
-
-class ConfigFile( Config ):
-
-    def __init__( self, filename, defaults = None ):
-        Config.__init__( self, values = None, defaults = defaults, name = 'config' )
-        self._filename = filename
-        try:
-            with open( self._filename, 'r' ) as config_file:
-                self._values = json.load( config_file )
-        except FileNotFoundError as e:
-            print(e)
-
-
 class Duration:
     """Represents a time duration in just hours, and minutes.
 
@@ -155,7 +122,6 @@ class GoHome( object ):
 
     def __init__( self, start, *unused ):
         self.start = start
-
 
 
 class DummyRightNow( Task ):
