@@ -15,6 +15,7 @@ import sys
 import textwrap
 
 
+#TICKET_SECTIONS = [ 'PLC', 'PLATSUB', 'QA', 'PLS', 'GWN' ]
 
 
 class Abort( Exception ):
@@ -55,6 +56,39 @@ def duration_to_timedelta( duration ):
         seconds = seconds + ( float( match.group(1) ) * duration_factors[match.group(2)] )
     return timedelta( seconds = seconds )
 
+
+class Config:
+
+    def __init__( self, values, defaults, name = None ):
+        self._values = values
+        self._defaults = defaults or {}
+        self.name = name
+
+    def __getattr__( self, attr ):
+        if attr in self._values:
+            if isinstance( self._values, list ):
+                return self._values[self._values.index( attr )]
+            if isinstance( self._values, dict ):
+                if isinstance( self._values[attr], dict ):
+                    return Config( self._values[attr], self._defaults.get( attr ) )
+            return self._values[attr]
+        elif self._defaults and attr in self._defaults:
+            return self._defaults[attr]
+        elif hasattr( self._values, attr ):
+            return getattr( self._values, attr )
+        raise AttributeError( 'Configuration section "{}" not found'.format( attr ) )
+
+
+class ConfigFile( Config ):
+
+    def __init__( self, filename, defaults = None ):
+        Config.__init__( self, values = None, defaults = defaults, name = 'config' )
+        self._filename = filename
+        try:
+            with open( self._filename, 'r' ) as config_file:
+                self._values = json.load( config_file )
+        except FileNotFoundError as e:
+            print(e)
 
 
 class Color( object ):
@@ -416,13 +450,21 @@ def dict_to_object( d ):
         return konstructor( **d )
 
 
-
-
 def parse_common_args( args ):
     return Worklog( when = args.day )
 
 
-def on_start( args ):
+def _pull_ticket_from_description( description, config ):
+    if not description:
+        return None
+    ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( config.jira.get('projects', []) ) ) )
+    re_match = ticket_re.search( description )
+    if re_match:
+        ticket = re_match.group()
+        return ticket
+
+
+def on_start( args, config ):
     worklog = parse_common_args( args )
 
     start = resolve_at_or_ago( args, date = worklog.when )
@@ -437,16 +479,16 @@ def on_start( args ):
                 raise Abort()
             except EOFError:
                 raise Abort()
-
+        if config.features.get( 'scrape-ticket' ) and description and not ticket:
+            ticket = _pull_ticket_from_description( description, config )
         worklog.insert( Task( start = start, ticket = ticket, description = description ) )
         worklog.save()
     except Abort:
         sys.stdout.write( '\n' )
+    report( worklog, config )
 
-    report( worklog )
 
-
-def on_resume( args ):
+def on_resume( args, config ):
     worklog = parse_common_args( args )
 
     start = resolve_at_or_ago( args, date = worklog.when )
@@ -489,52 +531,28 @@ def on_resume( args ):
     except Abort:
         sys.stdout.write( '\n' )
 
-    report( worklog )
+    report( worklog, config )
 
 
-def on_stop( args ):
+def on_stop( args, config ):
     worklog = parse_common_args( args )
 
     worklog.insert( GoHome( start = resolve_at_or_ago( args, date = worklog.when ) ) )
     worklog.save()
-    report( worklog )
+    report( worklog, config )
 
 
-def log_to_jira( worklog ):
-    config_path = os.path.expanduser( '~/.worklog/config.json' )
-
-    try:
-        with open( config_path ) as json_data:
-            auth_file = json.load( json_data )
-
-            try:
-                options = { 'server': '{}'.format( auth_file['server'] ) }
-            except KeyError:
-                server = imput( '\nJira Server: ' )
-                options = { 'server': server }
-
-            try:
-                username = auth_file['username']
-            except KeyError:
-                username = input( '\nJira Username: ' )
-
-            try:
-                password = auth_file['password']
-            except KeyError:
-                password = getpass()
-
-    except OSError as e:
-        if e.errno ==  errno.ENOENT:
-            username = input( '\nJira Username: ' )
-            password = getpass()
-        else:
-            raise e
+def log_to_jira( worklog, config ):
+    options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
+    username = config.jira.username or input( '\nJira Username: ' )
+    password = config.jira.password or getpass()
 
     auth = ( username, password )
     jira = JIRA( options, basic_auth = auth )
     if len( worklog ) != 0:
         for task, next_task in worklog.pairwise():
-            if isinstance( task, GoHome ): continue
+            if isinstance( task, GoHome ):
+                continue
 
             if task.ticket is not None:
                 time = Duration( delta = next_task.start - task.start )
@@ -554,7 +572,7 @@ def log_to_jira( worklog ):
                 )
 
 
-def report( worklog ):
+def report( worklog, config ):
     total = timedelta( seconds = 0 )
     rollup = dict()
 
@@ -604,14 +622,14 @@ def report( worklog ):
             ) )
 
 
-def on_report( args ):
+def on_report( args, config ):
     worklog = parse_common_args( args )
-    report( worklog )
+    report( worklog, config )
 
 
-def on_upload( args ):
+def on_upload( args, config ):
     worklog = parse_common_args( args )
-    log_to_jira( worklog )
+    log_to_jira( worklog, config )
 
 
 def main():
@@ -686,13 +704,16 @@ def main():
     upload_parser = sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
 
     args = parser.parse_args()
+    config_path = os.path.expanduser( '~/.worklog/config.json' )
+    config = ConfigFile( config_path )
+
     try:
         handler = globals()['on_{}'.format( args.command )]
     except KeyError:
         parser.print_help()
     else:
         if isinstance( handler, Callable ):
-            handler( args )
+            handler( args, config )
         else:
             parser.error( "unrecognized command: '{}'".format( args.command ) )
 
