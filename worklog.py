@@ -517,7 +517,7 @@ def on_resume( args, config ):
                 raise Abort()
             except EOFError:
                 raise Abort()
-            except ValueError, IndexError:
+            except ( ValueError, IndexError ):
                 print( 'Must be an integer between 0 and {:d}'.format( len( descriptions ) ) )
 
         worklog.insert( Task( start = start, ticket = ticket, description = description ) )
