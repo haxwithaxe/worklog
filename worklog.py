@@ -18,19 +18,23 @@ class Abort( Exception ):
     pass
 
 
-def now():
-    """datetime.now() with seconds zeroed out"""
-    now = datetime.now()
-    return now.replace( second = 0, microsecond = 0 )
 
+SECONDS_IN_MINUTE = 60
+SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
+SECONDS_IN_DAY = SECONDS_IN_HOUR * 8
 
-duration_factors = {
+DURATION_FACTORS = {
     'd': 60 * 60 * 8,
     'h': 60 * 60,
     'm': 60,
 }
 
-duration_re = re.compile( r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format( ''.join( duration_factors.keys() ) ) )
+DURATION_RE = re.compile( r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format( ''.join( DURATION_FACTORS.keys() ) ) )
+
+def now():
+    """datetime.now() with seconds zeroed out"""
+    now = datetime.now()
+    return now.replace( second = 0, microsecond = 0 )
 
 def duration_to_timedelta( duration ):
     """Convert a human readable time duration to a timedelta object
@@ -48,10 +52,20 @@ def duration_to_timedelta( duration ):
         1d 4h 30m
     """
     seconds = 0
-    for match in duration_re.finditer( duration ):
-        seconds = seconds + ( float( match.group(1) ) * duration_factors[match.group(2)] )
+    for match in DURATION_RE.finditer( duration ):
+        seconds = seconds + ( float( match.group(1) ) * DURATION_FACTORS[match.group(2)] )
     return timedelta( seconds = seconds )
 
+
+def resolve_at_or_ago( args, date ):
+    if args.at:
+        hour, minute = args.at.split( ':' )
+        start = time( hour = int( hour ), minute = int( minute ) )
+        return datetime.combine( date, start )
+    elif args.ago:
+        return now() - duration_to_timedelta( args.ago )
+    else:
+        return now()
 
 class Config:
 
@@ -87,7 +101,7 @@ class ConfigFile( Config ):
             print(e)
 
 
-class Color( object ):
+class Color:
 
     ENABLED = True
 
@@ -273,13 +287,7 @@ class Color( object ):
         return Color.colorize( value, **kwargs )
 
 
-
-
-SECONDS_IN_MINUTE = 60
-SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
-SECONDS_IN_DAY = SECONDS_IN_HOUR * 8
-
-class Duration( object ):
+class Duration:
     """Represents a time duration in just hours, and minutes.
 
     Easy for conversion to jira-format"""
@@ -313,20 +321,8 @@ class Duration( object ):
         return ' '.join( parts )
 
 
+class Task:
 
-def resolve_at_or_ago( args, date ):
-    if args.at:
-        hour, minute = args.at.split( ':' )
-        start = time( hour = int( hour ), minute = int( minute ) )
-        return datetime.combine( date, start )
-    elif args.ago:
-        return now() - duration_to_timedelta( args.ago )
-    else:
-        return now()
-
-
-
-class Task( object ):
     def __init__( self, start, ticket, description ):
         self.start = start
         self.ticket = ticket
@@ -340,20 +336,22 @@ class Task( object ):
         return True
 
 
-
 class GoHome( object ):
+
     def __init__( self, start, *unused ):
         self.start = start
 
 
 
 class DummyRightNow( Task ):
+
     def __init__( self ):
         super( DummyRightNow, self ).__init__( start = now(), ticket = '', description = '' )
 
 
 
 class Worklog( MutableSequence ):
+
     def __init__( self, when = None ):
         if when is None:
             self.when = date.today()
@@ -361,9 +359,7 @@ class Worklog( MutableSequence ):
             self.when = datetime.strptime( when, '%Y-%m-%d' ).date()
         else:
             self.when = date
-
         self.persist_path = os.path.expanduser( '~/.worklog/{}-2.json'.format( self.when.strftime( '%F' ) ) )
-
         try:
             with open( self.persist_path, 'r' ) as json_file:
                 self.store = json.load( json_file, object_hook = dict_to_object )
@@ -403,7 +399,6 @@ class Worklog( MutableSequence ):
         return zip( self.store, offset )
 
 
-
 class KlassEncoder( json.JSONEncoder ):
     """Encodes Task objects and datetime objects to JSON using __klass__ indicator key"""
 
@@ -427,7 +422,6 @@ class KlassEncoder( json.JSONEncoder ):
             return super( KlassEncoder, self ).default( obj )
 
 
-
 # When this was an instance method on a subclass of json.JSONDecoder, python totally fucked up giving me
 # TypeError: __init__() got multiple values for argument 'object_hook'
 # even though I was overriding, not adding, my own object_hook
@@ -448,16 +442,6 @@ def dict_to_object( d ):
 
 def parse_common_args( args ):
     return Worklog( when = args.day )
-
-
-def _pull_ticket_from_description( description, config ):
-    if not description:
-        return None
-    ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( config.jira.get('projects', []) ) ) )
-    re_match = ticket_re.search( description )
-    if re_match:
-        ticket = re_match.group()
-        return ticket
 
 
 def on_start( args, config ):
@@ -484,28 +468,32 @@ def on_start( args, config ):
     report( worklog, config )
 
 
+def _pull_ticket_from_description( description, config ):
+    if not description:
+        return None
+    ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( config.jira.get('projects', []) ) ) )
+    re_match = ticket_re.search( description )
+    if re_match:
+        ticket = re_match.group()
+        return ticket
+
+
 def on_resume( args, config ):
     worklog = parse_common_args( args )
-
     start = resolve_at_or_ago( args, date = worklog.when )
-
     try:
         descriptions = list()
         for description in reversed( [ task.description for task in worklog if isinstance( task, Task ) ] ):
             if description not in descriptions:
                 descriptions.append( description )
-
         # when using resume, it means we're no longer working on the description that is now the first
         # item in this list, because of how we've sorted it. It is quite inconvenient for the first
         # choice to be the one we know for sure the user won't pick, bump it to the end of the line
         most_recent_description = descriptions.pop( 0 )
         descriptions.append( most_recent_description )
-
         for idx, description in enumerate( descriptions ):
             print( '[{:d}] {}'.format( idx, description ) )
-
         description = None
-
         while description is None:
             try:
                 idx = int( input( 'Which description: ' ) )
@@ -517,9 +505,8 @@ def on_resume( args, config ):
                 raise Abort()
             except EOFError:
                 raise Abort()
-            except ValueError, IndexError:
+            except ( ValueError, IndexError ):
                 print( 'Must be an integer between 0 and {:d}'.format( len( descriptions ) ) )
-
         worklog.insert( Task( start = start, ticket = ticket, description = description ) )
         worklog.save()
     except Abort:
@@ -538,14 +525,12 @@ def log_to_jira( worklog, config ):
     options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
     username = config.jira.username or input( '\nJira Username: ' )
     password = config.jira.password or getpass()
-
     auth = ( username, password )
     jira = JIRA( options, basic_auth = auth )
     if len( worklog ) != 0:
         for task, next_task in worklog.pairwise():
             if isinstance( task, GoHome ):
                 continue
-
             if task.ticket is not None:
                 time = Duration( delta = next_task.start - task.start )
                 started = '{}-{}-{}T{}:{}:00.000-0400'.format(
@@ -567,12 +552,10 @@ def log_to_jira( worklog, config ):
 def report( worklog, config ):
     total = timedelta( seconds = 0 )
     rollup = dict()
-
     print( '{} {}'.format(
         Color.bold( 'Worklog Report for' ),
         Color.purple( worklog.when.strftime( '%F' ), bold = True )
     ) )
-
     if len( worklog ) == 0:
         print( '    no entries' )
     else:
@@ -583,7 +566,6 @@ def report( worklog, config ):
                 colorize_end_time = Color.yellow
             else:
                 colorize_end_time = Color.green
-
             delta = next_task.start - task.start
             if task.include_in_rollup():
                 total += delta
@@ -591,7 +573,6 @@ def report( worklog, config ):
                     rollup[task.description] = delta
                 else:
                     rollup[task.description] += delta
-
             print( '    {:5s} {} {:5s} {}{!s:>7}{}  {}  {}'.format(
                 Color.green( task.start.strftime( '%H:%M' ) ),
                 Color.black( '-', intense = True ),
