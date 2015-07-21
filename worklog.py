@@ -6,16 +6,12 @@ from collections.abc import MutableSequence
 from datetime import date, datetime, timedelta, time
 import errno
 from getpass import getpass
-import itertools
 from jira.client import JIRA
 import json
 import os
 import re
 import sys
 import textwrap
-
-
-#TICKET_SECTIONS = [ 'PLC', 'PLATSUB', 'QA', 'PLS', 'GWN' ]
 
 
 class Abort( Exception ):
@@ -484,7 +480,7 @@ def on_start( args, config ):
         worklog.insert( Task( start = start, ticket = ticket, description = description ) )
         worklog.save()
     except Abort:
-        sys.stdout.write( '\n' )
+        print()
     report( worklog, config )
 
 
@@ -506,7 +502,7 @@ def on_resume( args, config ):
         descriptions.append( most_recent_description )
 
         for idx, description in enumerate( descriptions ):
-            sys.stdout.write( '[{:d}] {}\n'.format( idx, description ) )
+            print( '[{:d}] {}'.format( idx, description ) )
 
         description = None
 
@@ -521,22 +517,18 @@ def on_resume( args, config ):
                 raise Abort()
             except EOFError:
                 raise Abort()
-            except ValueError:
-                sys.stdout.write( 'Must be an integer between 0 and {:d}\n'.format( len( descriptions ) ) )
-            except IndexError:
-                sys.stdout.write( 'Must be an integer between 0 and {:d}\n'.format( len( descriptions ) ) )
+            except ValueError, IndexError:
+                print( 'Must be an integer between 0 and {:d}'.format( len( descriptions ) ) )
 
         worklog.insert( Task( start = start, ticket = ticket, description = description ) )
         worklog.save()
     except Abort:
-        sys.stdout.write( '\n' )
-
+        print()
     report( worklog, config )
 
 
 def on_stop( args, config ):
     worklog = parse_common_args( args )
-
     worklog.insert( GoHome( start = resolve_at_or_ago( args, date = worklog.when ) ) )
     worklog.save()
     report( worklog, config )
@@ -564,7 +556,7 @@ def log_to_jira( worklog, config ):
                     task.start.minute
                 )
                 ticket = jira.issue( task.ticket )
-                sys.stdout.write( '\nLogging {} to ticket {}\n'.format( time, ticket ) )
+                print( '\nLogging {} to ticket {}'.format( time, ticket ) )
                 jira.add_worklog(
                     issue = ticket,
                     timeSpent = str( time ),
@@ -576,17 +568,17 @@ def report( worklog, config ):
     total = timedelta( seconds = 0 )
     rollup = dict()
 
-    sys.stdout.write( '{} {}\n'.format(
+    print( '{} {}'.format(
         Color.bold( 'Worklog Report for' ),
         Color.purple( worklog.when.strftime( '%F' ), bold = True )
     ) )
 
     if len( worklog ) == 0:
-        sys.stdout.write( '    no entries\n' )
+        print( '    no entries' )
     else:
         for task, next_task in worklog.pairwise():
-            if isinstance( task, GoHome ): continue
-
+            if isinstance( task, GoHome ):
+                continue
             if isinstance( next_task, DummyRightNow ):
                 colorize_end_time = Color.yellow
             else:
@@ -600,7 +592,7 @@ def report( worklog, config ):
                 else:
                     rollup[task.description] += delta
 
-            sys.stdout.write( '    {:5s} {} {:5s} {}{!s:>7}{}  {}  {}\n'.format(
+            print( '    {:5s} {} {:5s} {}{!s:>7}{}  {}  {}'.format(
                 Color.green( task.start.strftime( '%H:%M' ) ),
                 Color.black( '-', intense = True ),
                 colorize_end_time( next_task.start.strftime( '%H:%M' ) ),
@@ -611,12 +603,12 @@ def report( worklog, config ):
                 task.description
             ) )
 
-        sys.stdout.write( '\n    {!s:>7}  {}\n'.format(
+        print( '\n    {!s:>7}  {}'.format(
             Duration( total ).colorized( underline = True ),
             Color.colorize( 'TOTAL', bold = True, underline = True )
         ) )
         for key in sorted( rollup.keys() ):
-            sys.stdout.write( '    {!s:>7}  {}\n'.format(
+            print( '    {!s:>7}  {}'.format(
                 Duration( rollup[key] ).colorized(),
                 Color.bold( key )
             ) )
