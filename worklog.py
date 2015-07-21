@@ -18,7 +18,6 @@ class Abort( Exception ):
     pass
 
 
-
 SECONDS_IN_MINUTE = 60
 SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
 SECONDS_IN_DAY = SECONDS_IN_HOUR * 8
@@ -35,6 +34,7 @@ def now():
     """datetime.now() with seconds zeroed out"""
     now = datetime.now()
     return now.replace( second = 0, microsecond = 0 )
+
 
 def duration_to_timedelta( duration ):
     """Convert a human readable time duration to a timedelta object
@@ -66,6 +66,7 @@ def resolve_at_or_ago( args, date ):
         return now() - duration_to_timedelta( args.ago )
     else:
         return now()
+
 
 class Config:
 
