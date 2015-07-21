@@ -34,10 +34,6 @@ WHITE = 7
 DEFAULT = 9
 
 
-def ENABLED:
-    return True
-
-
 def encode( *values ):
     if not ENABLED: return ''
     return '\033[{}m'.format( ';'.join( map( str, values ) ) )

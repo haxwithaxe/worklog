@@ -10,9 +10,9 @@ from jira.client import JIRA
 import json
 import os
 import re
-import sys
 import textwrap
 
+import color
 
 class Abort( Exception ):
     pass
@@ -102,192 +102,6 @@ class ConfigFile( Config ):
             print(e)
 
 
-class Color:
-
-    ENABLED = True
-
-    RESET = 0
-    RESET_ENCODED = '\033[0m'
-
-    BOLD_ON = 1
-    BOLD_OFF = 22
-
-    FAINT_ON = 2
-    FAINT_OFF = 22
-
-    ITALIC_ON = 3
-    ITALIC_OFF = 23
-
-    UNDERLINE_ON = 4
-    UNDERLINE_OFF = 24
-
-    INVERSE_ON = 7
-    INVERSE_OFF = 27
-
-    STRIKE_ON = 9
-    STRIKE_OFF = 29
-
-    BLACK = 0
-    RED = 1
-    GREEN = 2
-    YELLOW = 3
-    BLUE = 4
-    MAGENTA = 5
-    PURPLE = 5
-    CYAN = 6
-    WHITE = 7
-    DEFAULT = 9
-
-
-    @staticmethod
-    def encode( *values ):
-        if not Color.ENABLED: return ''
-        return '\033[{}m'.format( ';'.join( map( str, values ) ) )
-
-    @staticmethod
-    def build( before, value, after ):
-        if not Color.ENABLED: return value
-        return '{}{}{}'.format( Color.encode( *before ), value, Color.encode( *after ) )
-
-    @staticmethod
-    def vbuild( *values ):
-        """infer the before and after based upon what's a string and what's a number; maybe a dangerous convenience"""
-        before = list()
-        value = None
-        after = list()
-        eat = lambda x: before.append( x )
-
-        for v in values:
-            if isinstance( v, int ):
-                eat( v )
-            if isinstance( v, str ):
-                if value is None:
-                    value = v
-                    eat = lambda x: after.append( x )
-                else:
-                    raise ValueError( "too many strings in arguments" )
-
-        return Color.build( before, value, after )
-
-
-    @staticmethod
-    def bold( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.BOLD_ON, str( s ), Color.BOLD_OFF )
-
-    @staticmethod
-    def faint( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.FAINT_ON, str( s ), Color.FAINT_OFF )
-
-    @staticmethod
-    def italic( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.ITALIC_ON, str( s ), Color.ITALIC_OFF )
-
-    @staticmethod
-    def underline( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.UNDERLINE_ON, str( s ), Color.UNDERLINE_OFF )
-
-    @staticmethod
-    def inverse( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.INVERSE_ON, str( s ), Color.INVERSE_OFF )
-
-    @staticmethod
-    def strike( s ):
-        if not Color.ENABLED: return s
-        return Color.vbuild( Color.STRIKE_ON, str( s ), Color.STRIKE_OFF )
-
-
-    @staticmethod
-    def colorize( value, fg = None, bg = None, intense = False, bold = False, faint = False, italic = False, underline = False, inverse = False, strike = False ):
-        if not Color.ENABLED: return value
-        if bold and faint: raise ValueError( 'bold and faint are mutually exclusive' )
-
-        before = list()
-        after = list()
-
-        if intense:
-            if fg is not None: fg += 60
-            if bg is not None: bg += 60
-        if fg is not None:
-            fg += 30
-            before.append( fg )
-            after.append( Color.DEFAULT + 30 )
-        if bg is not None:
-            bg += 40
-            before.append( bg )
-            after.append( Color.DEFAULT + 40 )
-        if bold:
-            before.append( Color.BOLD_ON )
-            after.append( Color.BOLD_OFF )
-        if faint:
-            before.append( Color.FAINT_ON )
-            after.append( Color.FAINT_OFF )
-        if italic:
-            before.append( Color.ITALIC_ON )
-            after.append( Color.ITALIC_OFF )
-        if underline:
-            before.append( Color.UNDERLINE_ON )
-            after.append( Color.UNDERLINE_OFF )
-        if inverse:
-            before.append( Color.INVERSE_ON )
-            after.append( Color.INVERSE_OFF )
-        if strike:
-            before.append( Color.STRIKE_ON )
-            after.append( Color.STRIKE_OFF )
-
-        return Color.build( before, value, after )
-
-
-    @staticmethod
-    def black( value, **kwargs ):
-        kwargs['fg'] = Color.BLACK
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def red( value, **kwargs ):
-        kwargs['fg'] = Color.RED
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def green( value, **kwargs ):
-        kwargs['fg'] = Color.GREEN
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def yellow( value, **kwargs ):
-        kwargs['fg'] = Color.YELLOW
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def blue( value, **kwargs ):
-        kwargs['fg'] = Color.BLUE
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def magenta( value, **kwargs ):
-        kwargs['fg'] = Color.MAGENTA
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def purple( value, **kwargs ):
-        kwargs['fg'] = Color.PURPLE
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def cyan( value, **kwargs ):
-        kwargs['fg'] = Color.CYAN
-        return Color.colorize( value, **kwargs )
-
-    @staticmethod
-    def white( value, **kwargs ):
-        kwargs['fg'] = Color.WHITE
-        return Color.colorize( value, **kwargs )
-
-
 class Duration:
     """Represents a time duration in just hours, and minutes.
 
@@ -316,9 +130,9 @@ class Duration:
 
         parts = [ '   ', '   ' ]
         if self.hours > 0:
-            parts[0] = Color.cyan( '{:2d}'.format( self.hours ), **bold_kwargs ) + Color.cyan( 'h', **kwargs )
+            parts[0] = color.cyan( '{:2d}'.format( self.hours ), **bold_kwargs ) + color.cyan( 'h', **kwargs )
         if self.minutes > 0:
-            parts[1] = Color.blue( '{:2d}'.format( self.minutes ), **bold_kwargs ) + Color.blue( 'm', **kwargs )
+            parts[1] = color.blue( '{:2d}'.format( self.minutes ), **bold_kwargs ) + color.blue( 'm', **kwargs )
         return ' '.join( parts )
 
 
@@ -554,8 +368,8 @@ def report( worklog, config ):
     total = timedelta( seconds = 0 )
     rollup = dict()
     print( '{} {}'.format(
-        Color.bold( 'Worklog Report for' ),
-        Color.purple( worklog.when.strftime( '%F' ), bold = True )
+        color.bold( 'Worklog Report for' ),
+        color.purple( worklog.when.strftime( '%F' ), bold = True )
     ) )
     if len( worklog ) == 0:
         print( '    no entries' )
@@ -564,9 +378,9 @@ def report( worklog, config ):
             if isinstance( task, GoHome ):
                 continue
             if isinstance( next_task, DummyRightNow ):
-                colorize_end_time = Color.yellow
+                colorize_end_time = color.yellow
             else:
-                colorize_end_time = Color.green
+                colorize_end_time = color.green
             delta = next_task.start - task.start
             if task.include_in_rollup():
                 total += delta
@@ -575,24 +389,24 @@ def report( worklog, config ):
                 else:
                     rollup[task.description] += delta
             print( '    {:5s} {} {:5s} {}{!s:>7}{}  {}  {}'.format(
-                Color.green( task.start.strftime( '%H:%M' ) ),
-                Color.black( '-', intense = True ),
+                color.green( task.start.strftime( '%H:%M' ) ),
+                color.black( '-', intense = True ),
                 colorize_end_time( next_task.start.strftime( '%H:%M' ) ),
-                Color.black( '(', intense = True ),
+                color.black( '(', intense = True ),
                 Duration( delta ).colorized(),
-                Color.black( ')', intense = True ),
+                color.black( ')', intense = True ),
                 task.ticket,
                 task.description
             ) )
 
         print( '\n    {!s:>7}  {}'.format(
             Duration( total ).colorized( underline = True ),
-            Color.colorize( 'TOTAL', bold = True, underline = True )
+            color.colorize( 'TOTAL', bold = True, underline = True )
         ) )
         for key in sorted( rollup.keys() ):
             print( '    {!s:>7}  {}'.format(
                 Duration( rollup[key] ).colorized(),
-                Color.bold( key )
+                color.bold( key )
             ) )
 
 
@@ -680,7 +494,7 @@ def main():
     args = parser.parse_args()
     config_path = os.path.expanduser( '~/.worklog/config.json' )
     config = ConfigFile( config_path )
-
+    color.ENABLED = config.features.colorize
     try:
         handler = globals()['on_{}'.format( args.command )]
     except KeyError:
