@@ -134,12 +134,7 @@ class DummyRightNow( Task ):
 class Worklog( MutableSequence ):
 
     def __init__( self, when = None ):
-        if when is None:
-            self.when = date.today()
-        elif isinstance( when, str ):
-            self.when = datetime.strptime( when, '%Y-%m-%d' ).date()
-        else:
-            self.when = date
+        self._set_when( when )
         self.persist_path = os.path.expanduser( '~/.worklog/{}-2.json'.format( self.when.strftime( '%F' ) ) )
         try:
             with open( self.persist_path, 'r' ) as json_file:
@@ -149,6 +144,14 @@ class Worklog( MutableSequence ):
                 self.store = list()
             else:
                 raise
+
+    def _set_when(self, when):
+        """ figure out the time context of this worklog. """
+        if isinstance(when, str):
+            if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
+                self.when = datetime.strptime(when, "%Y-%m-%d").date()
+            else:
+                self.when = datetime.today()+timedelta(days=int(when))
 
     def __getitem__( self, *args ):
         return self.store.__getitem__( *args )
