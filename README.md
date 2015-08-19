@@ -4,6 +4,29 @@
 say "now I'm working on this" and later "now I'm working on that". At the end of the day, it can provide a summary
 report telling you how long you worked on each task.
 
+## installation
+
+`worklog` is simple to install, just run `make install` with appropriate privileges:
+
+```console
+sudo make install
+```
+
+You can also uninstall it later:
+
+```console
+sudo make uninstall
+```
+
+By default it installs files under `/etc/bash_completion.d` and `/usr/local/bin`. To change these locations, you'll
+need to provide alternatives on the command line:
+
+```console
+sudo make install prefix=/opt/ sysconfdir=/opt/etc/
+```
+
+The trailing `/` is critical. Remember to use the same override values when uninstalling
+
 ## usage
 
 `worklog` has a few commands and each one accepts parameters.
