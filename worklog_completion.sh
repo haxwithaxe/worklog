@@ -1,27 +1,23 @@
 
 _worklog(){
-    local cur=${COMP_WORDS[COMP_CWORD]}
-    local prev=${COMP_WORDS[COMP_CWORD-1]}
-    case $prev in
-        start)
-			COMPREPLY=($(compgen -o nospace -W "--ago --at" -- $cur))
-            return 0
-            ;;
-        stop)
-            COMPREPLY=($(compgen -o nospace -W "--ago --at" -- $cur))
-            return 0
-            ;;
-        resume)
-            COMPREPLY=($(compgen -o nospace -W "--ago --at" -- $cur))
-            ;;
-        report)
-            return 0
-            ;;
-		--day)
-			return 0
+	local options
+
+	case "${COMP_WORDS[1]}" in
+		start)
+			options="--ago --at --day --ticket"
 			;;
-    esac
-    COMPREPLY=($(compgen -W "start stop resume report --day" -- $cur))
+		stop|resume)
+			options="--ago --at --day"
+			;;
+		report|upload)
+			options="--day"
+			;;
+		*)
+			options="start stop resume report upload"
+			;;
+	esac
+
+	COMPREPLY=( $( compgen -W "--help ${options}" -- "${COMP_WORDS[COMP_CWORD]}" ) )
 }
 
 complete -F _worklog worklog
