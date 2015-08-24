@@ -5,32 +5,36 @@ from collections import Callable
 from collections.abc import MutableSequence
 from datetime import date, datetime, timedelta, time
 import errno
-import itertools
+from getpass import getpass
+from jira.client import JIRA
 import json
 import os
 import re
-import sys
 import textwrap
+
+import color
+from config import ConfigFile
+
+class Abort( Exception ):
+    pass
+
 
 SECONDS_IN_MINUTE = 60
 SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
 SECONDS_IN_DAY = SECONDS_IN_HOUR * 8
-duration_factors = {
-    "d": SECONDS_IN_DAY,
-    "h": SECONDS_IN_HOUR,
-    "m": SECONDS_IN_MINUTE,
+
+DURATION_FACTORS = {
+    'd': 60 * 60 * 8,
+    'h': 60 * 60,
+    'm': 60,
 }
-duration_re = re.compile(r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format(''.join(duration_factors.keys())))
 
-
-class Abort(Exception):
-    pass
-
+DURATION_RE = re.compile( r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format( ''.join( DURATION_FACTORS.keys() ) ) )
 
 def now():
     """datetime.now() with seconds zeroed out"""
     now = datetime.now()
-    return now.replace(second=0, microsecond=0)
+    return now.replace( second = 0, microsecond = 0 )
 
 
 def duration_to_timedelta(duration):
@@ -50,197 +54,23 @@ def duration_to_timedelta(duration):
 
     """
     seconds = 0
-    for match in duration_re.finditer(duration):
-        seconds = seconds + (float(match.group(1)) * duration_factors[match.group(2)])
-    return timedelta(seconds = seconds)
+    for match in DURATION_RE.finditer( duration ):
+        seconds = seconds + ( float( match.group(1) ) * DURATION_FACTORS[match.group(2)] )
+    return timedelta( seconds = seconds )
 
 
-class Color(object):
-    """ Terminal color helper. """
-
-    ENABLED = True
-    RESET = 0
-    RESET_ENCODED = "\033[0m"
-    BOLD_ON = 1
-    BOLD_OFF = 22
-    FAINT_ON = 2
-    FAINT_OFF = 22
-    ITALIC_ON = 3
-    ITALIC_OFF = 23
-    UNDERLINE_ON = 4
-    UNDERLINE_OFF = 24
-    INVERSE_ON = 7
-    INVERSE_OFF = 27
-    STRIKE_ON = 9
-    STRIKE_OFF = 29
-    BLACK = 0
-    RED = 1
-    GREEN = 2
-    YELLOW = 3
-    BLUE = 4
-    MAGENTA = 5
-    PURPLE = 5
-    CYAN = 6
-    WHITE = 7
-    DEFAULT = 9
-
-    @staticmethod
-    def encode(*values):
-        if not Color.ENABLED:
-            return ""
-        return "\033[{}m".format(";".join(map(str, values)))
-
-    @staticmethod
-    def build(before, value, after):
-        if not Color.ENABLED:
-            return value
-        return "{}{}{}".format(Color.encode(*before), value, Color.encode(*after))
-
-    @staticmethod
-    def vbuild(*values):
-        """infer the before and after based upon what"s a string and what"s a number; maybe a dangerous convenience"""
-        before = list()
-        value = None
-        after = list()
-        eat = lambda x: before.append(x)
-        for v in values:
-            if isinstance(v, int):
-                eat(v)
-            if isinstance(v, str):
-                if value is None:
-                    value = v
-                    eat = lambda x: after.append(x)
-                else:
-                    raise ValueError("too many strings in arguments")
-        return Color.build(before, value, after)
+def resolve_at_or_ago( args, date ):
+    if args.at:
+        hour, minute = args.at.split( ':' )
+        start = time( hour = int( hour ), minute = int( minute ) )
+        return datetime.combine( date, start )
+    elif args.ago:
+        return now() - duration_to_timedelta( args.ago )
+    else:
+        return now()
 
 
-    @staticmethod
-    def bold(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.BOLD_ON, str(s), Color.BOLD_OFF)
-
-    @staticmethod
-    def faint(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.FAINT_ON, str(s), Color.FAINT_OFF)
-
-    @staticmethod
-    def italic(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.ITALIC_ON, str(s), Color.ITALIC_OFF)
-
-    @staticmethod
-    def underline(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.UNDERLINE_ON, str(s), Color.UNDERLINE_OFF)
-
-    @staticmethod
-    def inverse(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.INVERSE_ON, str(s), Color.INVERSE_OFF)
-
-    @staticmethod
-    def strike(s):
-        if not Color.ENABLED:
-            return s
-        return Color.vbuild(Color.STRIKE_ON, str(s), Color.STRIKE_OFF)
-
-
-    @staticmethod
-    def colorize(value, fg=None, bg=None, intense=False, bold=False, faint=False, italic=False, underline=False, inverse=False, strike=False):
-        if not Color.ENABLED:
-            return value
-        if bold and faint: 
-            raise ValueError("bold and faint are mutually exclusive")
-        before = list()
-        after = list()
-        if intense:
-            if fg is not None:
-                fg += 60
-            if bg is not None:
-                bg += 60
-        if fg is not None:
-            fg += 30
-            before.append(fg)
-            after.append(Color.DEFAULT + 30)
-        if bg is not None:
-            bg += 40
-            before.append(bg)
-            after.append(Color.DEFAULT + 40)
-        if bold:
-            before.append(Color.BOLD_ON)
-            after.append(Color.BOLD_OFF)
-        if faint:
-            before.append(Color.FAINT_ON)
-            after.append(Color.FAINT_OFF)
-        if italic:
-            before.append(Color.ITALIC_ON)
-            after.append(Color.ITALIC_OFF)
-        if underline:
-            before.append(Color.UNDERLINE_ON)
-            after.append(Color.UNDERLINE_OFF)
-        if inverse:
-            before.append(Color.INVERSE_ON)
-            after.append(Color.INVERSE_OFF)
-        if strike:
-            before.append(Color.STRIKE_ON)
-            after.append(Color.STRIKE_OFF)
-        return Color.build(before, value, after)
-
-
-    @staticmethod
-    def black(value, **kwargs):
-        kwargs["fg"] = Color.BLACK
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def red(value, **kwargs):
-        kwargs["fg"] = Color.RED
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def green(value, **kwargs):
-        kwargs["fg"] = Color.GREEN
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def yellow(value, **kwargs):
-        kwargs["fg"] = Color.YELLOW
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def blue(value, **kwargs):
-        kwargs["fg"] = Color.BLUE
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def magenta(value, **kwargs):
-        kwargs["fg"] = Color.MAGENTA
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def purple(value, **kwargs):
-        kwargs["fg"] = Color.PURPLE
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def cyan(value, **kwargs):
-        kwargs["fg"] = Color.CYAN
-        return Color.colorize(value, **kwargs)
-
-    @staticmethod
-    def white(value, **kwargs):
-        kwargs["fg"] = Color.WHITE
-        return Color.colorize(value, **kwargs)
-
-
-class Duration(object):
+class Duration:
     """Represents a time duration in just hours, and minutes.
 
     Easy for conversion to jira-format
@@ -249,9 +79,9 @@ class Duration(object):
 
     def __init__(self, delta):
         self.delta = delta
-        seconds = int(delta.total_seconds())
-        self.hours, seconds = divmod(seconds, SECONDS_IN_HOUR)
-        self.minutes, seconds = divmod(seconds, SECONDS_IN_MINUTE)
+        self.seconds = int(delta.total_seconds())
+        self.hours, seconds = divmod(self.seconds, SECONDS_IN_HOUR)
+        self.minutes, seconds = divmod(self.seconds, SECONDS_IN_MINUTE)
 
     def __str__(self):
         parts = list()
@@ -274,28 +104,19 @@ class Duration(object):
         bold_kwargs["bold"] = True
         parts = ["   ", "   "]
         if self.hours > 0:
-            parts[0] = Color.cyan("{:2d}".format(self.hours), **bold_kwargs) + Color.cyan("h", **kwargs)
+            parts[0] = color.cyan( '{:2d}'.format( self.hours ), **bold_kwargs ) + color.cyan( 'h', **kwargs )
         if self.minutes > 0:
-            parts[1] = Color.blue("{:2d}".format(self.minutes), **bold_kwargs) + Color.blue("m", **kwargs)
-        return " ".join(parts)
+            parts[1] = color.blue( '{:2d}'.format( self.minutes ), **bold_kwargs ) + color.blue( 'm', **kwargs )
+        return ' '.join( parts )
 
 
-def resolve_at_or_ago(args, date):
-    if args.at:
-        hour, minute = args.at.split(":")
-        start = time(hour=int(hour), minute=int(minute))
-        return datetime.combine(date, start)
-    elif args.ago:
-        return now() - duration_to_timedelta(args.ago)
-    else:
-        return now()
+class Task:
 
-
-class Task(object):
-
-    def __init__(self, start, description):
+    def __init__( self, start, ticket, description, logged = False ):
         self.start = start
+        self.ticket = ticket
         self.description = description.strip()
+        self.logged = logged
 
     def include_in_rollup(self):
         if self.description.lower() == "lunch":
@@ -305,42 +126,42 @@ class Task(object):
         return True
 
 
-class GoHome(object):
+class GoHome( object ):
 
-    def __init__(self, start, *unused):
+    def __init__( self, start, *unused ):
         self.start = start
 
-class DummyRightNow(Task):
 
-    def __init__(self):
-        super(DummyRightNow, self).__init__(start=now(), description="")
+class DummyRightNow( Task ):
+
+    def __init__( self ):
+        super( DummyRightNow, self ).__init__( start = now(), ticket = '', description = '' )
 
 
-class Worklog(MutableSequence):
+class Worklog( MutableSequence ):
 
-    def __init__(self, when=None):
-        self.when = datetime.today()
-        self._set_when(when)
-        self.persist_path = os.path.expanduser("~/.worklog/{}-2.json".format(self.when.strftime("%F")))
-        self.store = []
-        self._load_persistence()
-
-    def _set_when(self, when):
-        """ figure out the time context of this worklog. """
-        if isinstance(when, str):
-            if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
-                self.when = datetime.strptime(when, "%Y-%m-%d").date()
-            else:
-                self.when = datetime.today()+timedelta(days=int(when))
-
-    def _load_persistence(self):
-        """ Load the cache file for this worklog. """
+    def __init__( self, when = None ):
+        self.when = date
+        self._set_when( when )
+        self.persist_path = os.path.expanduser( '~/.worklog/{}-2.json'.format( self.when.strftime( '%F' ) ) )
         try:
             with open(self.persist_path, "r") as json_file:
                 self.store = json.load(json_file, object_hook=dict_to_object)
         except IOError as err:
-            if err.errno != errno.ENOENT:
+            if err.errno == errno.ENOENT:
+                self.store = list()
+            else:
                 raise
+
+    def _set_when( self, when ):
+        """ figure out the time context of this worklog. """
+        if when is None:
+            self.when = date.today()
+        elif isinstance(when, str):
+            if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
+                self.when = datetime.strptime(when, "%Y-%m-%d").date()
+            else:
+                self.when = datetime.today()+timedelta(days=int(when))
 
     def __getitem__(self, *args):
         return self.store.__getitem__(*args)
@@ -364,7 +185,7 @@ class Worklog(MutableSequence):
         if not os.access(directory, os.F_OK):
             os.makedirs(directory, mode=0o755)
         with open(self.persist_path, "w") as json_file:
-            json.dump(self.store, json_file, cls=ObjectEncoder, indent=4)
+            json.dump(self.store, json_file, cls=KlassEncoder, indent=4)
 
     def pairwise(self):
         offset = self.store[1:]
@@ -372,13 +193,12 @@ class Worklog(MutableSequence):
         return zip(self.store, offset)
 
 
-class ObjectEncoder(json.JSONEncoder):
-    """ Encodes select objects to JSON using __klass__ indicator key. """
+class KlassEncoder( json.JSONEncoder ):
+    """Encodes Task objects and datetime objects to JSON using __klass__ indicator key"""
 
-    def default(self, obj):
-        if isinstance(obj, (Task, GoHome)):
+    def default( self, obj ):
+        if isinstance( obj, ( Task, GoHome ) ):
             d = obj.__dict__.copy()
-            #d["start"] = obj.start.strftime("%s")
             d["__klass__"] = obj.__class__.__name__
             return d
         elif isinstance(obj, datetime):
@@ -411,13 +231,16 @@ def dict_to_object(d):
         return factory(**d)
 
 
-def parse_common_args(args):
-    return Worklog(when=args.day)
+def parse_common_args( args ):
+    return Worklog( when = args.day )
 
 
-def on_start(args):
-    worklog = parse_common_args(args)
-    start = resolve_at_or_ago(args, date=worklog.when)
+def on_start( args, config ):
+    worklog = parse_common_args( args )
+
+    start = resolve_at_or_ago( args, date = worklog.when )
+    ticket = args.ticket
+
     try:
         description = " ".join(args.description)
         while len(description.strip()) == 0:
@@ -427,72 +250,116 @@ def on_start(args):
                 raise Abort()
             except EOFError:
                 raise Abort()
-        worklog.insert(Task(start = start, description = description))
+        if config.features.get( 'scrape-ticket' ) and description and not ticket:
+            ticket = _pull_ticket_from_description( description, config )
+        worklog.insert( Task( start = start, ticket = ticket, description = description, logged = False ) )
         worklog.save()
     except Abort:
-        sys.stdout.write("\n")
-    report(worklog)
+        print()
+    report( worklog, config )
 
 
-def on_resume(args):
-    worklog = parse_common_args(args)
-    start = resolve_at_or_ago(args, date = worklog.when)
+def _pull_ticket_from_description( description, config ):
+    if not description:
+        return None
+    ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( config.jira.get('projects', []) ) ) )
+    re_match = ticket_re.search( description )
+    if re_match:
+        ticket = re_match.group()
+        return ticket
+
+
+def on_resume( args, config ):
+    worklog = parse_common_args( args )
+    start = resolve_at_or_ago( args, date = worklog.when )
     try:
         descriptions = list()
         for description in reversed([ task.description for task in worklog if isinstance(task, Task) ]):
             if description not in descriptions:
-                descriptions.append(description)
-        # When using resume, it means we"re no longer working on the description that is now the first
-        # item in this list, because of how we"ve sorted it. It is quite inconvenient for the first
-        # choice to be the one we know for sure the user won"t pick, bump it to the end of the line
-        most_recent_description = descriptions.pop(0)
-        descriptions.append(most_recent_description)
-        for idx, description in enumerate(descriptions):
-            sys.stdout.write("[{:d}] {}\n".format(idx, description))
+                descriptions.append( description )
+        # when using resume, it means we're no longer working on the description that is now the first
+        # item in this list, because of how we've sorted it. It is quite inconvenient for the first
+        # choice to be the one we know for sure the user won't pick, bump it to the end of the line
+        most_recent_description = descriptions.pop( 0 )
+        descriptions.append( most_recent_description )
+        for idx, description in enumerate( descriptions ):
+            print( '[{:d}] {}'.format( idx, description ) )
         description = None
         while description is None:
             try:
                 idx = int(input("Which description: "))
                 description = descriptions[idx]
+                for task in worklog:
+                    if task.description == description:
+                        ticket = task.ticket
             except KeyboardInterrupt:
                 raise Abort()
             except EOFError:
                 raise Abort()
-            except ValueError:
-                sys.stdout.write("Must be an integer between 0 and {:d}\n".format(len(descriptions)))
-            except IndexError:
-                sys.stdout.write("Must be an integer between 0 and {:d}\n".format(len(descriptions)))
-
-        worklog.insert(Task(start = start, description = description))
+            except ( ValueError, IndexError ):
+                print( 'Must be an integer between 0 and {:d}'.format( len( descriptions ) ) )
+        worklog.insert( Task( start = start, ticket = ticket, description = description, logged = True ) )
         worklog.save()
     except Abort:
-        sys.stdout.write("\n")
-    report(worklog)
+        print()
+    report( worklog, config )
 
 
-def on_stop(args):
-    worklog = parse_common_args(args)
-    worklog.insert(GoHome(start = resolve_at_or_ago(args, date = worklog.when)))
+def on_stop( args, config ):
+    worklog = parse_common_args( args )
+    worklog.insert( GoHome( start = resolve_at_or_ago( args, date = worklog.when ) ) )
     worklog.save()
-    report(worklog)
+    report( worklog, config )
 
 
-def report(worklog):
-    total = timedelta(seconds = 0)
+def log_to_jira( worklog, config ):
+    options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
+    username = config.jira.username or input( '\nJira Username: ' )
+    password = config.jira.password or getpass()
+    auth = ( username, password )
+    jira = JIRA( options, basic_auth = auth )
+    if len( worklog ) > 0:
+        for task, next_task in worklog.pairwise():
+            if isinstance( task, GoHome ):
+                continue
+            if task.ticket is not None and not task.logged:
+                time = Duration( delta = next_task.start - task.start )
+                if not time.seconds:
+                    continue
+                started = '{}-{}-{}T{}:{}:00.000-0400'.format(
+                    task.start.year,
+                    task.start.month,
+                    task.start.day,
+                    task.start.hour,
+                    task.start.minute
+                )
+                ticket = jira.issue( task.ticket )
+                print( '\nLogging {} to ticket {}'.format( time, ticket ) )
+                jira.add_worklog(
+                    issue = ticket,
+                    timeSpent = str( time ),
+                    started = datetime.strptime( started, '%Y-%m-%dT%H:%M:%S.000%z' )
+                )
+                task.logged = True
+
+
+def report( worklog, config ):
+    total = timedelta( seconds = 0 )
     rollup = dict()
-    sys.stdout.write("{} {}\n".format(
-        Color.bold("Worklog Report for"),
-        Color.purple(worklog.when.strftime("%F"), bold = True)))
-    if len(worklog) == 0:
-        sys.stdout.write("    no entries\n")
+    print( '{} {}'.format(
+        color.bold( 'Worklog Report for' ),
+        color.purple( worklog.when.strftime( '%F' ), bold = True )
+    ) )
+    if len( worklog ) == 0:
+        print( '    no entries' )
     else:
         for task, next_task in worklog.pairwise():
-            if isinstance(task, GoHome):
+            if isinstance( task, GoHome ):
                 continue
-            if isinstance(next_task, DummyRightNow):
-                colorize_end_time = Color.yellow
+            if isinstance( next_task, DummyRightNow ):
+                colorize_end_time = color.yellow
             else:
-                colorize_end_time = Color.green
+                colorize_end_time = color.green
             delta = next_task.start - task.start
             if task.include_in_rollup():
                 total += delta
@@ -500,29 +367,36 @@ def report(worklog):
                     rollup[task.description] = delta
                 else:
                     rollup[task.description] += delta
-            sys.stdout.write("    {:5s} {} {:5s} {}{!s:>7}{}  {}\n".format(
-                Color.green(task.start.strftime("%H:%M")),
-                Color.black("-", intense = True),
-                colorize_end_time(next_task.start.strftime("%H:%M")),
-                Color.black("(", intense = True),
-                Duration(delta).colorized(),
-                Color.black(")", intense = True),
+            print( '    {:5s} {} {:5s} {}{!s:>7}{}  {}  {}'.format(
+                color.green( task.start.strftime( '%H:%M' ) ),
+                color.black( '-', intense = True ),
+                colorize_end_time( next_task.start.strftime( '%H:%M' ) ),
+                color.black( '(', intense = True ),
+                Duration( delta ).colorized(),
+                color.black( ')', intense = True ),
+                task.ticket,
                 task.description
-           ))
-        sys.stdout.write("\n    {!s:>7}  {}\n".format(
-            Duration(total).colorized(underline = True),
-            Color.colorize("TOTAL", bold = True, underline = True)
-       ))
-        for key in sorted(rollup.keys()):
-            sys.stdout.write("    {!s:>7}  {}\n".format(
-                Duration(rollup[key]).colorized(),
-                Color.bold(key)
-           ))
+            ) )
+
+        print( '\n    {!s:>7}  {}'.format(
+            Duration( total ).colorized( underline = True ),
+            color.colorize( 'TOTAL', bold = True, underline = True )
+        ) )
+        for key in sorted( rollup.keys() ):
+            print( '    {!s:>7}  {}'.format(
+                Duration( rollup[key] ).colorized(),
+                color.bold( key )
+            ) )
 
 
-def on_report(args):
-    worklog = parse_common_args(args)
-    report(worklog)
+def on_report( args, config ):
+    worklog = parse_common_args( args )
+    report( worklog, config )
+
+
+def on_upload( args, config ):
+    worklog = parse_common_args( args )
+    log_to_jira( worklog, config )
 
 
 def main():
@@ -555,34 +429,58 @@ def main():
               Times should be provided in the form HH:MM. All times used, including "now",
               have their seconds zeroed out. All times provided on the command line are
               assumed to occur today.
-        """),
-   )
-    sub_parser = parser.add_subparsers(dest = "command")
-    common_parser = argparse.ArgumentParser(add_help = False)
-    common_parser.add_argument("--day", "-d", help = "manage the worklog for DATE, defaults to today")
-    blurb = "start a new task, closing the currently open task if any"
-    start_parser = sub_parser.add_parser("start", help = blurb, description = blurb, parents = [ common_parser ])
-    start_parser.add_argument("--ago", metavar = "DURATION", help = "start the task DURATION time ago, instead of now")
-    start_parser.add_argument("--at", metavar = "TIME", help = "start the task at TIME, instead of now")
-    start_parser.add_argument("description", metavar = "DESCRIPTION", nargs = argparse.REMAINDER, help = "specify the task's description on the command line")
-    blurb = "like start, but reuse the description from a previous task in this worklog by seleting it from a list"
-    resume_parser = sub_parser.add_parser("resume", help = blurb, description = blurb, parents = [ common_parser ])
-    resume_parser.add_argument("--ago", metavar = "DURATION", help = "start the task DURATION time ago, instead of now")
-    resume_parser.add_argument("--at", metavar = "TIME", help = "start the task at TIME, instead of now")
-    blurb = "close the currently open task"
-    stop_parser = sub_parser.add_parser("stop", help = blurb, description = blurb, parents = [ common_parser ])
-    stop_parser.add_argument("--ago", metavar = "DURATION", help = "close the open task DURATION time ago, instead of now")
-    stop_parser.add_argument("--at", metavar = "TIME", help = "close the open task at TIME, instead of now")
-    blurb = "report the current state of the worklog"
-    report_parser = sub_parser.add_parser("report", help = blurb, description = blurb, parents = [ common_parser ])
+
+            Config File:
+              ~/.worklog/config.json - Can be created to store username and password to avoid
+              being prompted to type in your credentials for Jira authentication.
+
+              Example File:
+                { "username" : "jsmith" }
+
+              WARNING:
+                Uploading multiple times in one calendar day will cause inconsistencies with time tracking
+                on the server side.
+        """ ),
+    )
+    sub_parser = parser.add_subparsers( dest = 'command' )
+
+    common_parser = argparse.ArgumentParser( add_help = False )
+    common_parser.add_argument( '--day', '-d', help = 'manage the worklog for DATE, defaults to today' )
+
+    blurb = 'start a new task, closing the currently open task if any'
+    start_parser = sub_parser.add_parser( 'start', help = blurb, description = blurb, parents = [ common_parser ] )
+    start_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+    start_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
+    start_parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
+    start_parser.add_argument( 'description', metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
+
+    blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
+    resume_parser = sub_parser.add_parser( 'resume', help = blurb, description = blurb, parents = [ common_parser ] )
+    resume_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+    resume_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
+
+    blurb = 'close the currently open task'
+    stop_parser = sub_parser.add_parser( 'stop', help = blurb, description = blurb, parents = [ common_parser ] )
+    stop_parser.add_argument( '--ago', metavar = 'DURATION', help = 'close the open task DURATION time ago, instead of now' )
+    stop_parser.add_argument( '--at', metavar = 'TIME', help = 'close the open task at TIME, instead of now' )
+
+    blurb = 'report the current state of the worklog'
+    report_parser = sub_parser.add_parser( 'report', help = blurb, description = blurb, parents = [ common_parser ] )
+
+    blurb = 'uploads worklog time to jira'
+    upload_parser = sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
+
     args = parser.parse_args()
+    config_path = os.path.expanduser( '~/.worklog/config.json' )
+    config = ConfigFile( config_path )
+    color.ENABLED = config.features.colorize
     try:
         handler = globals()["on_{}".format(args.command)]
     except KeyError:
         parser.print_help()
     else:
-        if isinstance(handler, Callable):
-            handler(args)
+        if isinstance( handler, Callable ):
+            handler( args, config )
         else:
             parser.error("unrecognized command: '{}'".format(args.command))
 
