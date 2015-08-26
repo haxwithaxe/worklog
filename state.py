@@ -1,138 +1,194 @@
 
-from collections import Callable
 from collections.abc import MutableSequence
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta
 import json
 import os
 import re
+import pprint
 
 
-SECONDS_IN_MINUTE = 60
-SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
-SECONDS_IN_DAY = SECONDS_IN_HOUR * 8
-
-DURATION_FACTORS = {
-    'd': 60 * 60 * 8,
-    'h': 60 * 60,
-    'm': 60,
-}
-
-DURATION_RE = re.compile( r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format( ''.join( DURATION_FACTORS.keys() ) ) )
+from time_utils import now
 
 
-def load_worklog( when ):
-	worklog = Worklog( when )
-	return worklog
+def debug( func ):
+	def wrapper( *args, **kwargs ):
+		#print( 'Debug: %s' % func.__qualname__)
+		return func( *args, **kwargs )
+	return wrapper
 
-
-
-def now():
-    """datetime.now() with seconds zeroed out"""
-    now = datetime.now()
-    return now.replace( second = 0, microsecond = 0 )
-
+class Abort( Exception ):
+	pass
 
 
 def _get_cls( cls_name ):
-	return {'Task': Task, 'GoHome': GoHome}[cls_name]
+	return { 'Task': Task, 'GoHome': GoHome }[cls_name]
 
 
 
 class Task:
 
-    def __init__( self, start, ticket, description, logged ):
-        self.start = start
-        self.ticket = ticket
-        self.description = description.strip()
+	@debug
+	def __init__( self, start = None, ticket = None, description = None, logged = None, config = None ):
+		self.config = config
+		self.start = start or now()
+		self.ticket = ticket
+		self.description = (description or '').strip()
 		self.logged = logged
+		if self.config and self.config.features.get( 'scrape-ticket' ) and self.description and not self.ticket:
+			self._pull_ticket_from_description()
 
-    def include_in_rollup(self):
-        return self.description.lower() not in ("lunch", "break" )
+	@debug
+	def include_in_rollup(self):
+		return self.description.lower() not in ("lunch", "break" )
 
-    def __getstate__( self ):
-        return { '__klass__': self.__class__.__name__, 'start': self.start, 'ticket': self.ticket, 'description': self.description, 'logged': self.logged }
-
-    def __setstate__( self, state ):
-        state.pop('__klass__')
-        self.__dict__.update( state )
-
-
-
-
-class GoHome:
-
-    def __init__( self, start, *unused ):
-        self.start = start
-
+	def _pull_ticket_from_description( self ):
+		if not self.description:
+			return None
+		ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( self.config.jira.get('projects', []) ) ) )
+		re_match = ticket_re.search( self.description )
+		if re_match:
+			self.ticket = re_match.group()
+	@debug
 	def __getstate__( self ):
-		return { '__klass__': self.__class__.__name__, 'start': self.start }
+		start = self._start_to_dict()
+		return { '__klass__': self.__class__.__name__, 'start': start, 'ticket': self.ticket, 'description': self.description, 'logged': self.logged }
 
+	@debug
 	def __setstate__( self, state ):
-		self.start = state.get( 'start' )
+		state.pop('__klass__')
+		self._start_from_dict( state.pop('start') )
+		self.__dict__.update( state )
+
+	@debug
+	def _start_to_dict( self ):
+		if not self.start:
+			return None
+		return {
+			"__klass__": "datetime",
+			"year": self.start.year,
+			"month": self.start.month,
+			"day": self.start.day,
+			"hour": self.start.hour,
+			"minute": self.start.minute,
+			"second": self.start.second,
+			"microsecond": self.start.microsecond
+		}
+
+	@debug
+	def _start_from_dict( self, datetime_dict ):
+		if not datetime_dict:
+			return None
+		datetime_dict.pop('__klass__')
+		year = datetime_dict.pop( 'year' )
+		month = datetime_dict.pop( 'month' )
+		day = datetime_dict.pop( 'day' )
+		self.start = datetime( year, month, day, **datetime_dict )
+
+	@debug
+	def __repr__(self):
+		return pprint.pformat(self.__getstate__())
+
+
+
+class GoHome( Task ):
+
+	@debug
+	def __getstate__( self ):
+		return { '__klass__': self.__class__.__name__, 'start': self._start_to_dict() }
+
+	@debug
+	def __setstate__( self, state ):
+		self._start_from_dict( state['start'] )
 
 
 
 class DummyRightNow( Task ):
 
-    def __init__( self ):
-        Task.__init__( start = now(), ticket = '', description = '' )
+	def __init__( self ):
+		Task.__init__( self, start = now(), ticket = '', description = '', logged = True, config = None )
 
+	def __getstate__( self ):
+		pass
+
+	def __setstate__( self, state ):
+		pass
 
 
 class Worklog( MutableSequence ):
 
-    def __init__( self, when = None ):
-        if when is None:
-            self.when = date.today()
-        elif isinstance(when, str):
-            if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
-                self.when = datetime.strptime(when, "%Y-%m-%d").date()
-            else:
-                self.when = datetime.today()+timedelta(days=int(when))
+	def __init__( self, when = None, config = None ):
+		self.store = []
+		self.config = config
+		if when is None:
+			self.when = date.today()
+		elif isinstance(when, str):
+			if re.findall("[0-9]{4}-[0-9]{2}-[0-9]{2}", when):
+				self.when = datetime.strptime(when, "%Y-%m-%d").date()
+			else:
+				self.when = datetime.today()+timedelta( days=int(when) )
+		filename = self.config.state.store_filename_format.format( self.when.strftime( self.config.state.when_format ) )
+		self.filename = os.path.expandvars( os.path.expanduser( filename ) )
 
-    def __getitem__(self, index ):
-        return self.store[index]
+	def __enter__(self):
+		self.load()
+		return self
 
-    def __setitem__(self, index, value ):
-        self.store[index] = value
+	def __exit__(self, exc_type, exc_value, exc_traceback ):
+		if not exc_type:
+			self.dump()
 
-    def __delitem__(self, index ):
-        del self.store[index]
+	def __getitem__(self, index ):
+		return self.store[index]
 
-    def __len__(self):
-        return len(self.store)
+	def __setitem__(self, index, value ):
+		self.store[index] = value
 
-    def insert(self, task):
-        self.store.append(task)
-        self.store.sort( key=lambda t: t.start )
+	def __delitem__(self, index ):
+		del self.store[index]
 
-    def pairwise(self):
-        offset = self.store[1:]
-        offset.append( DummyRightNow() )
-        return zip(self.store, offset)
+	def __len__(self):
+		return len(self.store)
+
+	def insert(self, task):
+		if task:
+			self.store.append(task)
+			self.store = [ x for x in self.store if x ]
+			self.store.sort( key=lambda t: t.start )
+
+	def pairwise(self):
+		offset = self.store[1:]
+		offset.append( DummyRightNow() )
+		return zip(self.store, offset)
 
 
 	def load( self ):
-		filename = '{}.json'.format(worklog.when)
-		with open(filename, 'rb') as file_handle:
+		if not os.path.exists( self.filename ):
+			return None
+		with open(self.filename, 'r') as file_handle:
 			state = json.load( file_handle )
 		self.__setstate__( state )
 
 
 	def dump( self ):
-		filename = '{}.json'.format(worklog.when)
-		with open(filename, 'wb') as file_handle:
-			json.dump( self.__getstate__(), file_handle )
+		state = self.__getstate__()
+		if state:
+			with open(self.filename, 'w') as file_handle:
+				json.dump( state, file_handle )
 
 
 	def __getstate__( self ):
 		state = []
 		for item in self.store:
-			state.append( item.__getstate__() )
+			if item:
+				state.append( item.__getstate__() )
 		return state
 
 
 	def __setstate__( self, state ):
 		for item in state:
-			cls = _get_cls( item['__klass__'] )
-			self.store.append( cls().__setstate__( item ) )
+			cls = _get_cls( item['__klass__'] )()
+			cls.__setstate__( item )
+			self.store.append( cls )
+
+	def __repr__( self ):
+		return pprint.pformat( [ x.__getstate__() for x in self.store ] )

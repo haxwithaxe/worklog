@@ -37,14 +37,3 @@ class ConfigFile( Config ):
 
 
 
-def datetime_as_dict( obj ):
-	return {
-		"__klass__": "datetime",
-		"year": obj.year,
-		"month": obj.month,
-		"day": obj.day,
-		"hour": obj.hour,
-		"minute": obj.minute,
-		"second": obj.second,
-		"microsecond": obj.microsecond,
-	}
