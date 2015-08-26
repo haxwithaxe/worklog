@@ -67,10 +67,9 @@ class Duration:
 
 	def __init__(self, delta):
 		self.delta = delta
-		seconds = int(delta.total_seconds())
-		self.hours, seconds = divmod(seconds, SECONDS_IN_HOUR)
-		self.minutes, seconds = divmod(seconds, SECONDS_IN_MINUTE)
-		self.seconds = seconds
+		self.seconds = int(delta.total_seconds())
+		self.hours, seconds = divmod(self.seconds, SECONDS_IN_HOUR)
+		self.minutes, _ = divmod(seconds, SECONDS_IN_MINUTE)
 
 	def __str__(self):
 		parts = list()

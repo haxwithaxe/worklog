@@ -1,13 +1,12 @@
 #!/usr/bin/python3
 
 import argparse
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from collections import Callable
 from getpass import getpass
 from jira.client import JIRA
 import os
 import textwrap
-import pprint
 
 import color
 from config import ConfigFile
@@ -78,6 +77,7 @@ def log_to_jira( worklog, config ):
 	auth = ( username, password )
 	jira = JIRA( options, basic_auth = auth )
 	print( 'Logging work ...' )
+	print('worklog', worklog )
 	if len( worklog ) > 0:
 		for task, next_task in worklog.pairwise():
 			if isinstance( task, GoHome ):
@@ -94,7 +94,7 @@ def log_to_jira( worklog, config ):
 					task.start.minute
 				)
 				ticket = jira.issue( task.ticket )
-				print( '\nLogging {} to ticket {}'.format( time, ticket ) )
+				print( '\nLogging {} to ticket {}'.format( duration, ticket ) )
 				jira.add_worklog(
 					issue = ticket,
 					timeSpent = str( duration ),
