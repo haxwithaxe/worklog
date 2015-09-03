@@ -77,7 +77,6 @@ def log_to_jira( worklog, config ):
 	auth = ( username, password )
 	jira = JIRA( options, basic_auth = auth )
 	print( 'Logging work ...' )
-	print('worklog', worklog )
 	if len( worklog ) > 0:
 		for task, next_task in worklog.pairwise():
 			if isinstance( task, GoHome ):
@@ -130,16 +129,18 @@ def report( worklog, config ):
 					rollup[task.description] = delta
 				else:
 					rollup[task.description] += delta
-			lines.append( '	{:5s} {} {:5s} {}{!s:>7}{}  {}  {}'.format(
-				color.green( task.start.strftime( '%H:%M' ) ),
-				color.black( '-', intense = True ),
-				colorize_end_time( next_task.start.strftime( '%H:%M' ) ),
-				color.black( '(', intense = True ),
-				Duration( delta ).colorized(),
-				color.black( ')', intense = True ),
-				task.ticket,
-				task.description
-			) )
+			if delta > timedelta():
+				lines.append( '	{:5s} {} {:5s} {}{!s:>7}{} {} {}  {}'.format(
+					color.green( task.start.strftime( '%H:%M' ) ),
+					color.black( '-', intense = True ),
+					colorize_end_time( next_task.start.strftime( '%H:%M' ) ),
+					color.black( '(', intense = True ),
+					Duration( delta ).colorized(),
+					color.black( ')', intense = True ),
+					{True: color.green('*'), False: color.red('*')}[task.logged],
+					task.ticket,
+					task.description
+				) )
 
 		lines.append( '\n	{!s:>7}  {}'.format(
 			Duration( total ).colorized( underline = True ),
@@ -152,7 +153,7 @@ def report( worklog, config ):
 			) )
 		print( '\n'.join( lines ) )
 
-	
+
 
 def on_report( args, config ):
 	with Worklog( when = args.day, config = config ) as worklog:
