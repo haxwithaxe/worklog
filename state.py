@@ -28,7 +28,7 @@ def _get_cls( cls_name ):
 class Task:
 
 	@debug
-	def __init__( self, start = None, ticket = None, description = None, logged = None, config = None ):
+	def __init__( self, start = None, ticket = False, description = None, logged = None, config = None ):
 		self.config = config
 		self.start = start or now()
 		self.ticket = ticket
@@ -39,15 +39,16 @@ class Task:
 
 	@debug
 	def include_in_rollup(self):
-		return self.description.lower() not in ("lunch", "break" )
+		return self.description.lower() not in ( "lunch", "break" )
 
 	def _pull_ticket_from_description( self ):
 		if not self.description:
 			return None
-		ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( self.config.jira.get('projects', []) ) ) )
+		ticket_re = re.compile( '({})-[0-9]+'.format( '|'.join( self.config.jira.get( 'projects', [] ) ) ) )
 		re_match = ticket_re.search( self.description )
 		if re_match:
 			self.ticket = re_match.group()
+
 	@debug
 	def __getstate__( self ):
 		start = self._start_to_dict()
