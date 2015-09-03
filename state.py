@@ -10,12 +10,6 @@ import pprint
 from time_utils import now
 
 
-def debug( func ):
-	def wrapper( *args, **kwargs ):
-		#print( 'Debug: %s' % func.__qualname__)
-		return func( *args, **kwargs )
-	return wrapper
-
 class Abort( Exception ):
 	pass
 
@@ -27,7 +21,7 @@ def _get_cls( cls_name ):
 
 class Task:
 
-	@debug
+	
 	def __init__( self, start = None, ticket = False, description = None, logged = None, config = None ):
 		self.config = config
 		self.start = start or now()
@@ -37,7 +31,7 @@ class Task:
 		if self.config and self.config.features.get( 'scrape-ticket' ) and self.description and not self.ticket:
 			self._pull_ticket_from_description()
 
-	@debug
+	
 	def include_in_rollup(self):
 		return self.description.lower() not in ( "lunch", "break" )
 
@@ -49,18 +43,18 @@ class Task:
 		if re_match:
 			self.ticket = re_match.group()
 
-	@debug
+	
 	def __getstate__( self ):
 		start = self._start_to_dict()
 		return { '__klass__': self.__class__.__name__, 'start': start, 'ticket': self.ticket, 'description': self.description, 'logged': self.logged }
 
-	@debug
+	
 	def __setstate__( self, state ):
 		state.pop('__klass__')
 		self._start_from_dict( state.pop('start') )
 		self.__dict__.update( state )
 
-	@debug
+	
 	def _start_to_dict( self ):
 		if not self.start:
 			return None
@@ -75,7 +69,7 @@ class Task:
 			"microsecond": self.start.microsecond
 		}
 
-	@debug
+	
 	def _start_from_dict( self, datetime_dict ):
 		if not datetime_dict:
 			return None
@@ -85,7 +79,7 @@ class Task:
 		day = datetime_dict.pop( 'day' )
 		self.start = datetime( year, month, day, **datetime_dict )
 
-	@debug
+	
 	def __repr__(self):
 		return pprint.pformat(self.__getstate__())
 
@@ -93,11 +87,11 @@ class Task:
 
 class GoHome( Task ):
 
-	@debug
+	
 	def __getstate__( self ):
 		return { '__klass__': self.__class__.__name__, 'start': self._start_to_dict() }
 
-	@debug
+	
 	def __setstate__( self, state ):
 		self._start_from_dict( state['start'] )
 
