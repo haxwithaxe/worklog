@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from collections import Callable
 from getpass import getpass
 from jira.client import JIRA
+from jira.utils import JIRAError
 import os
 import textwrap
 
@@ -75,7 +76,11 @@ def log_to_jira( worklog, config ):
 	username = config.jira.username or input( '\nJira Username: ' )
 	password = config.jira.password or getpass()
 	auth = ( username, password )
-	jira = JIRA( options, basic_auth = auth )
+	try:
+		jira = JIRA( options, basic_auth = auth )
+	except JIRAError as e:
+		print(e)
+		return None
 	print( 'Logging work ...' )
 	if len( worklog ) > 0:
 		for task, next_task in worklog.pairwise():
@@ -130,6 +135,8 @@ def report( worklog, config ):
 				else:
 					rollup[task.description] += delta
 			if delta > timedelta():
+				if not task.logged:
+					task.logged = False
 				lines.append( '	{:5s} {} {:5s} {}{!s:>7}{} {} {}  {}'.format(
 					color.green( task.start.strftime( '%H:%M' ) ),
 					color.black( '-', intense = True ),
