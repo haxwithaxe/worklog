@@ -73,21 +73,22 @@ def on_stop( args, config ):
 
 def log_to_jira( worklog, config ):
 
-	oauth_token = None
-	oauth_token_secret = None
+	oauth_token = ''
+	oauth_token_secret = ''
 
 	oauth_dict = {
 		'access_token': oauth_token,
 		'access_token_secret': oauth_token_secret,
-		'consumer_key': None,
+		'consumer_key': '',
 		'key_cert': open('/home/ckoepke/dev/worklog/rsa.pem').read()
 	}
+
 	options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
-	#username = config.jira.username or input( '\nJira Username: ' )
+	username = config.jira.username or input( '\nJira Username: ' )
 	#password = config.jira.password or getpass()
-	auth = ( username, password )
+	#auth = ( username, password )
 	try:
-		jira = JIRA( options=options,oauth=oauth_dict)
+		jira = JIRA( options = options, oauth = oauth_dict )
 		#jira = JIRA( options, basic_auth = auth )
 	except JIRAError as e:
 		print(e)
@@ -97,7 +98,7 @@ def log_to_jira( worklog, config ):
 		for task, next_task in worklog.pairwise():
 			if isinstance( task, GoHome ):
 				continue
-			if task.ticket is not None and not task.logged:
+			if task.ticket and not task.logged:
 				duration = Duration( delta = next_task.start - task.start )
 				if not duration.seconds:
 					continue
@@ -108,6 +109,7 @@ def log_to_jira( worklog, config ):
 					task.start.hour,
 					task.start.minute
 				)
+				print('ticket', task.ticket )
 				ticket = jira.issue( task.ticket )
 				print( '\nLogging {} to ticket {}'.format( duration, ticket ) )
 				jira.add_worklog(
