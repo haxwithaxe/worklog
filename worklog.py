@@ -72,12 +72,23 @@ def on_stop( args, config ):
 
 
 def log_to_jira( worklog, config ):
+
+	oauth_token = None
+	oauth_token_secret = None
+
+	oauth_dict = {
+		'access_token': oauth_token,
+		'access_token_secret': oauth_token_secret,
+		'consumer_key': None,
+		'key_cert': open('/home/ckoepke/dev/worklog/rsa.pem').read()
+	}
 	options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
-	username = config.jira.username or input( '\nJira Username: ' )
-	password = config.jira.password or getpass()
+	#username = config.jira.username or input( '\nJira Username: ' )
+	#password = config.jira.password or getpass()
 	auth = ( username, password )
 	try:
-		jira = JIRA( options, basic_auth = auth )
+		jira = JIRA( options=options,oauth=oauth_dict)
+		#jira = JIRA( options, basic_auth = auth )
 	except JIRAError as e:
 		print(e)
 		return None

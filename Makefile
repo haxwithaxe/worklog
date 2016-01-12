@@ -18,10 +18,10 @@ ${BASHCOMPDIR}:
 	mkdir -p ${BASHCOMPDIR}
 
 $(BASHCOMPDIR)worklog_completion.sh: $(BASHCOMPDIR)
-	ln -s $(BASHCOMP) $@
+	ln -sf $(BASHCOMP) $@
 
 $(bindir)worklog:
-	ln -s $(SCRIPT) $@
+	ln -sf $(SCRIPT) $@
 
 uninstall:
 	unlink $(BASHCOMPDIR)worklog_completion.sh
