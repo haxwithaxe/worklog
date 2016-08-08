@@ -10,7 +10,7 @@ PWD ?= $(shell pwd)
 
 BASHCOMPDIR ?= $(sysconfdir)bash_completion.d/
 BASHCOMP ?= $(PWD)/worklog_completion.sh
-SCRIPT ?= $(PWD)/worklog.py
+SCRIPT ?= $(PWD)/worklog/worklog.py
 
 install: $(BASHCOMPDIR)worklog_completion.sh $(bindir)worklog
 

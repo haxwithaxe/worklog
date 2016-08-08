@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from collections import Callable
 from getpass import getpass
 from jira.client import JIRA
-from jira.utils import JIRAError
+from jira.exceptions import JIRAError
 import os
 import textwrap
 
@@ -73,14 +73,14 @@ def on_stop( args, config ):
 
 def log_to_jira( worklog, config ):
 
-	oauth_token = ''
-	oauth_token_secret = ''
+	with open(config.jira.oauth_pem_filename) as pem:
+		pem_data = pem.read()
 
 	oauth_dict = {
-		'access_token': oauth_token,
-		'access_token_secret': oauth_token_secret,
-		'consumer_key': '',
-		'key_cert': open('/home/ckoepke/dev/worklog/rsa.pem').read()
+		'access_token': config.jira.oauth_token,
+		'access_token_secret': config.jira.oauth_token_secret,
+		'consumer_key': config.jira.oauth_consumer_key,
+		'key_cert': pem_data 
 	}
 
 	options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
