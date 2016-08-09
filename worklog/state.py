@@ -7,7 +7,7 @@ import re
 import pprint
 
 
-from time_utils import now
+from worklog.time_utils import now
 
 
 class Abort( Exception ):

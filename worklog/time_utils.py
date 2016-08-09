@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, time
 import re
 
-import color
+import worklog.color
 
 SECONDS_IN_MINUTE = 60
 SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60

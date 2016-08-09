@@ -9,11 +9,10 @@ from jira.exceptions import JIRAError
 import os
 import textwrap
 
-from worklog.alias import handle_alias
-import worklog.color
-from worklog.config import ConfigFile
-from worklog.state import Worklog, Task, GoHome, DummyRightNow, Abort
-from worklog.time_utils import *
+import color
+from config import ConfigFile
+from state import Worklog, Task, GoHome, DummyRightNow, Abort
+from time_utils import *
 
 
 
@@ -66,16 +65,15 @@ def on_resume( args, config ):
 	report( worklog, config )
 
 
-
 def on_stop( args, config ):
 	with Worklog( when = args.day, config = config ) as worklog:
 		worklog.insert( GoHome( start = resolve_at_or_ago( args, date = worklog.when ) ) )
 	report( worklog, config )
 
 
-
 def log_to_jira( worklog, config ):
-	with open( config.jira.oauth_pem_filename ) as pem:
+
+	with open(config.jira.oauth_pem_filename) as pem:
 		pem_data = pem.read()
 
 	oauth_dict = {
@@ -83,7 +81,7 @@ def log_to_jira( worklog, config ):
 		'access_token_secret': config.jira.oauth_token_secret,
 		'consumer_key': config.jira.oauth_consumer_key,
 		'key_cert': pem_data 
-		}
+	}
 
 	options = { 'server': config.jira.server or  input( '\nJira Server: ' ) }
 	username = config.jira.username or input( '\nJira Username: ' )
@@ -93,7 +91,7 @@ def log_to_jira( worklog, config ):
 		jira = JIRA( options = options, oauth = oauth_dict )
 		#jira = JIRA( options, basic_auth = auth )
 	except JIRAError as e:
-		print( e )
+		print(e)
 		return None
 	print( 'Logging work ...' )
 	if len( worklog ) > 0:
@@ -231,56 +229,48 @@ def main():
 				Uploading multiple times in one calendar day will cause inconsistencies with time tracking
 				on the server side.
 		""" ),
-		)
+	)
 	sub_parser = parser.add_subparsers( dest = 'command' )
 
 	common_parser = argparse.ArgumentParser( add_help = False )
 	common_parser.add_argument( '--day', '-d', help = 'manage the worklog for DATE, defaults to today' )
 
-	start_blurb = 'start a new task, closing the currently open task if any'
-	start_parser = sub_parser.add_parser( '--start', help = start_blurb, description = start_blurb, parents = [ common_parser ] )
+	blurb = 'start a new task, closing the currently open task if any'
+	start_parser = sub_parser.add_parser( 'start', help = blurb, description = blurb, parents = [ common_parser ] )
 	start_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
 	start_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
 	start_parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
 	start_parser.add_argument( 'description', metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
 
-	resume_blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
-	resume_parser = sub_parser.add_parser( '--resume', help = resume_blurb, description = resume_blurb, parents = [ common_parser ] )
+	blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
+	resume_parser = sub_parser.add_parser( 'resume', help = blurb, description = blurb, parents = [ common_parser ] )
 	resume_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
 	resume_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
 
-	stop_blurb = 'close the currently open task'
-	stop_parser = sub_parser.add_parser( '--stop', help = stop_blurb, description = stop_blurb, parents = [ common_parser ] )
+	blurb = 'close the currently open task'
+	stop_parser = sub_parser.add_parser( 'stop', help = blurb, description = blurb, parents = [ common_parser ] )
 	stop_parser.add_argument( '--ago', metavar = 'DURATION', help = 'close the open task DURATION time ago, instead of now' )
 	stop_parser.add_argument( '--at', metavar = 'TIME', help = 'close the open task at TIME, instead of now' )
 
-	report_blurb = 'report the current state of the worklog'
-	report_parser = sub_parser.add_parser( '--report', help = report_blurb, description = report_blurb, parents = [ common_parser ] )
+	blurb = 'report the current state of the worklog'
+	report_parser = sub_parser.add_parser( 'report', help = blurb, description = blurb, parents = [ common_parser ] )
 
-	upload_blurb = 'uploads worklog time to jira'
-	upload_parser = sub_parser.add_parser( '--upload', help = upload_blurb, description = upload_blurb, parents = [ common_parser ] )
-
-	parser.add_argument( 'alias', nargs='+', help = 'take aliases as commands' )
+	blurb = 'uploads worklog time to jira'
+	upload_parser = sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
 
 	args = parser.parse_args()
 	config_path = os.path.expanduser( '~/.worklog/config.json' )
 	config = ConfigFile( config_path )
 	color.ENABLED = config.features.colorize
 	try:
-		action = args.command
+		handler = globals()["on_{}".format(args.command)]
 	except KeyError:
 		parser.print_help()
 	else:
-		switch = {
-			'--start': on_start,
-			'--stop': on_stop,
-			'--resume': on_resume,
-			'--report': on_report,
-			'--upload': on_upload
-		}
-		handler = switch.get(args.command, handle_alias)
-		handler( args, config )
-
+		if isinstance( handler, Callable ):
+			handler( args, config )
+		else:
+			parser.error("unrecognized command: '{}'".format(args.command))
 
 
 if __name__ == "__main__":
@@ -288,3 +278,4 @@ if __name__ == "__main__":
 		main()
 	except Abort:
 		pass
+
