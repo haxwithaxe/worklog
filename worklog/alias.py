@@ -11,7 +11,6 @@ def get_aliases( config = None ):
 
 
 def resolve_alias( alias, aliases ):
-	print( alias, aliases )
 	if alias in aliases:
 		return ' '.join( ( aliases[alias], alias ) )
 	return False
