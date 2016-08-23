@@ -61,7 +61,7 @@ def vbuild( *values ):
 		if isinstance( value, int ):
 			eat( value )
 		if isinstance( value, str ):
-			if value is None:
+			if value is not None:
 				string_value = value
 				eat = lambda x: after.append( x )
 			else:
