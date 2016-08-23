@@ -7,11 +7,14 @@ import re
 import pprint
 
 
+from worklog import NO_ROLLUP_KEYWORDS
 from worklog.time_utils import now
+
 
 
 class Abort( Exception ):
 	pass
+
 
 
 def _get_cls( cls_name ):
@@ -34,8 +37,14 @@ class Task:
 			self._pull_ticket_from_description()
 
 	
-	def include_in_rollup(self):
-		return self.description.lower() not in ( "lunch", "break" )
+	def include_in_rollup( self ):
+		description = self.description.lower()+' '
+		if description in NO_ROLLUP_KEYWORDS:
+			return False
+		elif description.split()[0] in NO_ROLLUP_KEYWORDS:
+			return False
+		else:
+			return True
 
 
 	def _pull_ticket_from_description( self ):
