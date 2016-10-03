@@ -1,8 +1,12 @@
 import json
 import os
 
+from worklog import CONFIG_PATH
+
 
 class Config:
+
+	__passthrough = ( 'get', 'update' )
 
 	def __init__( self, values, defaults, name = None ):
 		self._values = values
@@ -10,10 +14,12 @@ class Config:
 		self.name = name
 
 	def __iter__( self ):
-		return iter(self._values)
+		return iter( tuple( self._values.items() ) )
 
 	def __getattr__( self, attr ):
-		if attr in self._values:
+		if attr in self.__passthrough:
+			return getattr( self._values, attr )
+		elif attr in self._values:
 			if isinstance( self._values, list ):
 				return self._values[self._values.index( attr )]
 			if isinstance( self._values, dict ):
@@ -29,9 +35,9 @@ class Config:
 
 class ConfigFile( Config ):
 
-	def __init__( self, filename, defaults = None ):
+	def __init__( self, filename = None, defaults = None ):
 		Config.__init__( self, values = None, defaults = defaults, name = 'config' )
-		self._filename = filename
+		self._filename = filename or CONFIG_PATH
 		try:
 			with open( self._filename, 'r' ) as config_file:
 				self._values = json.load( config_file )

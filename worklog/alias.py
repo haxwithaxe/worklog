@@ -1,44 +1,20 @@
 
-from collections import namedtuple
+import os
+
+from worklog.config import ConfigFile
 
 
-
-class BadAlias( Exception ):
-	pass
-
-class NewArgs:
-
-	def __init__( self, data ):
-		self.__data = data
-
-	def __iter__( self ):
-		return iter( self.__data )
-
-	def __getitem__( self, key ):
-		return self.__data[key]
-
-	def __setitem__( self, key, value ):
-		self.__data[key] = value
-
-	def __getattr__( self, attr ):
-		if attr in self.__data:
-			return self.__data[attr]
-
-	def update( self, data ):
-		self.__data.update( data )
+def get_aliases( config = None ):
+	if not config:
+		config = ConfigFile()
+	return config.aliases or {}
 
 
-def handle_alias( args, config ):
-	alias = None
-	if len(args.alias) > 1:
-		line = ' '.join( args.alias )
-		if line in config.aliases:
-			alias = config.aliases.get( line )
-	elif args.alias[0] in config.aliases:
-		alias = config.aliases.get( args.alias[0] )
-		alias['description'] += ' '.join( args.alias[1:] )
-	if alias:
-		new_args = NewArgs( alias )
-	else:
-		raise BadAlias( 'Invalid command: {}'.format( args.alias ) )
-	return new_args
+def resolve_alias( alias, aliases ):
+	if alias in aliases:
+		return ' '.join( ( aliases[alias], alias ) )
+	return False
+
+
+if __name__ == "__main__":
+	print( ' '.join( get_aliases().keys() ) )

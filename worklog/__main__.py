@@ -1,39 +1,97 @@
 
 import argparse
+from collections import Callable
 import os
 import textwrap
 
-from worklog import actions
+from worklog import alias
 from worklog import color
-from worklog.alias import handle_alias, BadAlias
 from worklog.config import ConfigFile
-from worklog.state import Abort
+from worklog.report import Report
+from worklog.state import Worklog, Task, GoHome, Abort
+from worklog.time_utils import resolve_at_or_ago
+from worklog.upload import log_to_jira
 
 
-def handle_arguments( args, config ):
-	action = args.alias or args.start or args.stop or args.resume or args.report or args.upload
-	print('handle_arguments', action)
-	switch = {
-		'--start': actions.start,
-		'--stop': actions.stop,
-		'--resume': actions.resume,
-		'--report': actions.report,
-		'--upload': actions.upload
-	}
-	handler = switch.get( action )
-	if not handler:
-		args = handle_alias( args, config )
-		handle_arguments( args, config )
-	else:
-		handler( args, config )
+
+def on_start( args, config ):
+	with Worklog( when = args.day, config = config ) as worklog:
+		start = resolve_at_or_ago( args, date = worklog.when )
+		ticket = args.ticket
+		description = ' '.join( args.description )
+		while len( description.strip() ) == 0:
+			try:
+				description = input( 'Task description: ' )
+			except KeyboardInterrupt:
+				raise Abort()
+			except EOFError:
+				raise Abort()
+		worklog.insert( Task( start = start, ticket = ticket, description = description, logged = False, config = config ) )
+	print( Report( worklog, config ) )
+
+
+
+def on_resume( args, config ):
+	with Worklog( when = args.day, config = config ) as worklog:
+		start = resolve_at_or_ago( args, date = worklog.when )
+		descriptions = list()
+		for description in reversed( [ task.description for task in worklog if isinstance( task, Task ) ] ):
+			if description not in descriptions:
+				descriptions.append( description )
+		# when using resume, it means we're no longer working on the description that is now the first
+		# item in this list, because of how we've sorted it. It is quite inconvenient for the first
+		# choice to be the one we know for sure the user won't pick, bump it to the end of the line
+		most_recent_description = descriptions.pop( 0 )
+		descriptions.append( most_recent_description )
+		for idx, description in enumerate( descriptions ):
+			print( '[{:d}] {}'.format( idx, description ) )
+		description = None
+		while description is None:
+			try:
+				idx = int( input( "Which description: " ) )
+				description = descriptions[idx]
+				for task in worklog:
+					if task.description == description:
+						ticket = task.ticket
+			except KeyboardInterrupt:
+				raise Abort()
+			except EOFError:
+				raise Abort()
+			except ( ValueError, IndexError ):
+				print( 'Must be an integer between 0 and {:d}'.format( len( descriptions ) ) )
+		worklog.insert( Task( start = start, ticket = ticket, description = description, logged = True, config = config ) )
+	print( Report( worklog, config ) )
+
+
+
+def on_stop( args, config ):
+	with Worklog( when = args.day, config = config ) as worklog:
+		worklog.insert( GoHome( start = resolve_at_or_ago( args, date = worklog.when ) ) )
+	print( Report( worklog, config ) )
+
+
+
+def on_report( args, config ):
+	with Worklog( when = args.day, config = config ) as worklog:
+		print( Report( worklog, config ) )
+
+
+
+def on_upload( args, config ):
+	with Worklog( when = args.day, config = config ) as worklog:
+		log_to_jira( worklog, config )
 
 
 
 def main():
+	config_path = os.path.expanduser( '~/.worklog/config.json' )
+	config = ConfigFile( config_path )
+	command_aliases = dict( alias.get_aliases( config ).__iter__() )
 	parser = argparse.ArgumentParser(
+		prog = 'worklog',
 		description = "manage and report time allocation",
 		formatter_class = argparse.RawDescriptionHelpFormatter,
-		epilog = textwrap.dedent("""
+		epilog = textwrap.dedent( """\
 			DURATIONs
 			  Spans of time can be provided in a concise format, a series of integers or
 			  floats each appended with a unit: d, h, m. Whitespace between each component
@@ -71,41 +129,65 @@ def main():
 				Uploading multiple times in one calendar day will cause inconsistencies with time tracking
 				on the server side.
 		""" ),
-		)
-	parser.add_argument( '--day', '-d', help = 'manage the worklog for DATE, defaults to today' )
+	)
+	sub_parser = parser.add_subparsers( dest = 'command' )
 
-	start_blurb = 'start a new task, closing the currently open task if any'
-	parser.add_argument( '--start', help = start_blurb )
-	parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
-	parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
-	parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
-	parser.add_argument( 'description', metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
+	common_parser = argparse.ArgumentParser( add_help = False )
+	common_parser.add_argument( '--day', '-d', help = 'manage the worklog for DATE, defaults to today' )
 
-	resume_blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
-	parser.add_argument( '--resume', help = resume_blurb )
+	blurb = 'start a new task, closing the currently open task if any'
+	start_parser = sub_parser.add_parser( 'start', help = blurb, description = blurb, parents = [ common_parser ] )
+	start_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+	start_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
+	start_parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
+	start_parser.add_argument( 'description', metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
 
-	stop_blurb = 'close the currently open task'
-	parser.add_argument( '--stop', help = stop_blurb )
+	blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
+	resume_parser = sub_parser.add_parser( 'resume', help = blurb, description = blurb, parents = [ common_parser ] )
+	resume_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+	resume_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
 
-	report_blurb = 'report the current state of the worklog'
-	parser.add_argument( '--report', help = report_blurb )
+	blurb = 'close the currently open task'
+	stop_parser = sub_parser.add_parser( 'stop', help = blurb, description = blurb, parents = [ common_parser ] )
+	stop_parser.add_argument( '--ago', metavar = 'DURATION', help = 'close the open task DURATION time ago, instead of now' )
+	stop_parser.add_argument( '--at', metavar = 'TIME', help = 'close the open task at TIME, instead of now' )
 
-	upload_blurb = 'uploads worklog time to jira'
-	parser.add_argument( '--upload', default=None, action='store', help = upload_blurb )
+	blurb = 'report the current state of the worklog'
+	report_parser = sub_parser.add_parser( 'report', help = blurb, description = blurb, parents = [ common_parser ] )
 
-	parser.add_argument( 'alias', nargs='+', default = [], help = 'take aliases as commands' )
+	blurb = 'uploads worklog time to jira'
+	upload_parser = sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
 
-	print('parsing')
+	blurb = 'short cut to "start <alias>"'
+	alias_parser = sub_parser.add_parser( 'alias', aliases = tuple( command_aliases.keys() ), help = blurb, description = blurb )
+	alias_parser.add_argument( '--ago', default = None, metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+	alias_parser.add_argument( '--at', default = None, metavar = 'TIME', help = 'start the task at TIME, instead of now' )
+	alias_parser.add_argument( '-t', '--ticket', default = None, metavar = 'TICKET', help = 'the TICKET associated with the task' )
+	alias_parser.add_argument( 'description', default = None, metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
+
 	args = parser.parse_args()
-	print('parsed')
-	config_path = os.path.expanduser( '~/.worklog/config.json' )
-	config = ConfigFile( config_path )
 	color.ENABLED = config.features.colorize
+	# If an alias was passed as the command unpack the values and reparse with start as the command.
+	if args.command in command_aliases:
+		args_kwargs = [ 'start' ]
+		kwargs = dict( args._get_kwargs() )
+		alias_str = alias.resolve_alias( kwargs.pop( 'command' ), command_aliases )
+		description = [ alias_str ] + kwargs.pop( 'description' )
+		for option, value in kwargs.items():
+			args_kwargs.append( '--' + option )
+			args_kwargs.append( value )
+		args_kwargs.extend( description )
+		args_kwargs.extend( args._get_args() )
+		args = parser.parse_args( args_kwargs )
 	try:
-		handle_arguments( args, config )
-	except BadAlias:
-		print('Invalid command or alias.')
+		handler = globals()['on_{}'.format( args.command )]
+	except KeyError:
 		parser.print_help()
+	else:
+		if isinstance( handler, Callable ):
+			handler( args, config )
+		else:
+			parser.error( "unrecognized command: '{}'".format( args.command ) )
 
 
 

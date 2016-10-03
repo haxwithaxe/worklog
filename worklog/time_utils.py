@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, time
 import re
 
-import worklog.color
+from worklog import color
 
 SECONDS_IN_MINUTE = 60
 SECONDS_IN_HOUR = SECONDS_IN_MINUTE * 60
@@ -12,7 +12,7 @@ DURATION_FACTORS = {
 	'd': 60 * 60 * 8,
 	'h': 60 * 60,
 	'm': 60,
-}
+	}
 
 DURATION_RE = re.compile( r'\s*(?:\s*(\d+(?:\.\d+)?)([{0}]))\s*'.format( ''.join( DURATION_FACTORS.keys() ) ) )
 
@@ -25,7 +25,7 @@ def now():
 
 
 
-def duration_to_timedelta(duration):
+def duration_to_timedelta( duration ):
 	"""Convert a human readable time duration to a timedelta object
 
 	Recognizes a sequence of one or more integers or floats appended with a
@@ -43,7 +43,7 @@ def duration_to_timedelta(duration):
 	"""
 	seconds = 0
 	for match in DURATION_RE.finditer( duration ):
-		seconds = seconds + ( float( match.group(1) ) * DURATION_FACTORS[match.group(2)] )
+		seconds = seconds + ( float( match.group( 1 ) ) * DURATION_FACTORS[match.group( 2 )] )
 	return timedelta( seconds = seconds )
 
 
@@ -65,29 +65,29 @@ class Duration:
 
 	"""
 
-	def __init__(self, delta):
+	def __init__( self, delta ):
 		self.delta = delta
-		self.seconds = int(delta.total_seconds())
-		self.hours, seconds = divmod(self.seconds, SECONDS_IN_HOUR)
-		self.minutes, _ = divmod(seconds, SECONDS_IN_MINUTE)
+		self.seconds = int( delta.total_seconds() )
+		self.hours, seconds = divmod( self.seconds, SECONDS_IN_HOUR )
+		self.minutes, _ = divmod( seconds, SECONDS_IN_MINUTE )
 
-	def __str__(self):
+	def __str__( self ):
 		parts = list()
 		if self.hours > 0:
-			parts.append("{:d}h".format(self.hours))
+			parts.append( "{:d}h".format( self.hours ) )
 		if self.minutes > 0:
-			parts.append("{:d}m".format(self.minutes))
-		return " ".join(parts)
+			parts.append( "{:d}m".format( self.minutes ) )
+		return " ".join( parts )
 
-	def formatted(self):
-		parts = ["", ""]
+	def formatted( self ):
+		parts = [ "", "" ]
 		if self.hours > 0:
-			parts[0] = "{:d}h".format(self.hours)
+			parts[0] = "{:d}h".format( self.hours )
 		if self.minutes > 0:
-			parts[1] = "{:d}m".format(self.minutes)
-		return "{:>3} {:>3}".format(*parts)
+			parts[1] = "{:d}m".format( self.minutes )
+		return "{:>3} {:>3}".format( *parts )
 
-	def colorized(self, **kwargs):
+	def colorized( self, **kwargs ):
 		bold_kwargs = kwargs.copy()
 		bold_kwargs["bold"] = True
 		parts = ["   ", "   "]
