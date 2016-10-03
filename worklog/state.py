@@ -7,11 +7,14 @@ import re
 import pprint
 
 
-from time_utils import now
+from worklog import NO_ROLLUP_KEYWORDS
+from worklog.time_utils import now
+
 
 
 class Abort( Exception ):
 	pass
+
 
 
 def _get_cls( cls_name ):
@@ -28,12 +31,21 @@ class Task:
 		self.ticket = ticket
 		self.description = (description or '').strip()
 		self.logged = logged
+		if self.config and self.config.features.get( 'resolve-aliases' ):
+			self._resolve_alias()
 		if self.config and self.config.features.get( 'scrape-ticket' ) and self.description and not self.ticket:
 			self._pull_ticket_from_description()
 
 	
-	def include_in_rollup(self):
-		return self.description.lower() not in ( "lunch", "break" )
+	def include_in_rollup( self ):
+		description = self.description.lower()+' '
+		if description in NO_ROLLUP_KEYWORDS:
+			return False
+		elif description.split()[0] in NO_ROLLUP_KEYWORDS:
+			return False
+		else:
+			return True
+
 
 	def _pull_ticket_from_description( self ):
 		if not self.description:
@@ -42,6 +54,15 @@ class Task:
 		re_match = ticket_re.search( self.description )
 		if re_match:
 			self.ticket = re_match.group()
+
+
+	def _resolve_alias( self ):
+		resolved = self.config.aliases.get( self.description.split()[0] )
+		if not resolved:
+			resolved = self.config.aliases.get( self.description )
+			if not resolved:
+				return None
+		self.description = ' '.join( ( resolved, self.description ) )
 
 	
 	def __getstate__( self ):

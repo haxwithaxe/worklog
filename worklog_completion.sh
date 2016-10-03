@@ -1,6 +1,7 @@
 
 _worklog(){
 	local options
+	local aliases=$( python3 -m worklog.alias )
 
 	case "${COMP_WORDS[1]}" in
 		start)
@@ -16,6 +17,7 @@ _worklog(){
 			options="start stop resume report upload"
 			;;
 	esac
+	options="${options} $aliases"
 
 	COMPREPLY=( $( compgen -W "--help ${options}" -- "${COMP_WORDS[COMP_CWORD]}" ) )
 }

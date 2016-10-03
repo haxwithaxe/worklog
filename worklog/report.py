@@ -1,31 +1,37 @@
 
 from datetime import timedelta
 
-import color
-from state import GoHome, DummyRightNow
-from time_utils import Duration
+from worklog import color
+from worklog.state import GoHome, DummyRightNow
+from worklog.time_utils import Duration
 
 class Report:
 
-	def __init__(self):
 
-
-	def __call__( worklog, config ):
-		lines = []
-		self.total = timedelta( seconds = 0 )
+	def __init__( self, worklog, config ):
+		self._entries = []
 		self._rollup = dict()
+		self.worklog = worklog
+		self.total = timedelta( seconds = 0 )
+		self._make_entries()
 
-	def header(self):
+	@property
+	def header( self ):
 		return '{} {}'.format(
 				color.bold( 'Worklog Report for' ),
 				color.purple( self.worklog.when.strftime( '%F' ), bold = True )
 				)
 
+	@property
+	def entries( self ):
+		return '\n'.join( self._entries )
+
+
 	def _make_entries( self ):
 		if len( self.worklog ) == 0:
 			return '\tno entries'
 		else:
-			for task, next_task in worklog.pairwise():
+			for task, next_task in self.worklog.pairwise():
 				if isinstance( task, GoHome ):
 					continue
 				if isinstance( next_task, DummyRightNow ):
@@ -35,19 +41,19 @@ class Report:
 				delta = next_task.start - task.start
 				if task.include_in_rollup():
 					self.total += delta
-					if task.description not in rollup:
+					if task.description not in self._rollup:
 						self._rollup[task.description] = delta
 					else:
 						self._rollup[task.description] += delta
 				if delta > timedelta():
 					if not task.logged:
 						task.logged = False
-					self._add_entry(task, next_task)
+					self._add_entry( delta, task, next_task )
 
-	def _add_entry( self, task, next_task ):
+	def _add_entry( self, delta, task, next_task ):
 		start_time = color.green( task.start.strftime( '%H:%M' ) )
 		start_end_delimiter = color.black( '-', intense = True )
-		end_time = colorize_end_time( next_task.start.strftime( '%H:%M' ) )
+		end_time = self.colorize_end_time( next_task )
 		duration_open = color.black( '(', intense = True )
 		duration = Duration( delta ).colorized()
 		duration_close = color.black( ')', intense = True )
@@ -65,17 +71,32 @@ class Report:
 				)
 		self._entries.append( entry )
 
+
+	@property
 	def footer( self ):
 		return '\n\t{!s:>7}  {}'.format(
-				Duration( total ).colorized( underline = True ),
+				Duration( self.total ).colorized( underline = True ),
 				color.colorize( 'TOTAL', bold = True, underline = True )
 				)
 
-	def rollup(self):
+
+	@property
+	def rollup( self ):
 		lines = []
-		for key in sorted( rollup.keys() ):
+		for key in sorted( self._rollup.keys() ):
 			lines.append( '	{!s:>7}  {}'.format(
-				Duration( rollup[key] ).colorized(),
+				Duration( self._rollup[key] ).colorized(),
 				color.bold( key )
 			) )
 		return '\n'.join( lines )
+
+
+	def colorize_end_time( self, next_task ):
+		colorizer = color.green
+		if isinstance( next_task, DummyRightNow ):
+			colorizer = color.yellow
+		return colorizer( next_task.start.strftime( '%H:%M' ) )
+
+
+	def __str__( self ):
+		return '\n'.join( (self.header, self.entries, self.footer, self.rollup) )
