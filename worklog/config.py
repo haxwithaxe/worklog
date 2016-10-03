@@ -1,5 +1,5 @@
+
 import json
-import os
 
 from worklog import CONFIG_PATH
 
@@ -36,13 +36,27 @@ class Config:
 class ConfigFile( Config ):
 
 	def __init__( self, filename = None, defaults = None ):
-		Config.__init__( self, values = None, defaults = defaults, name = 'config' )
+		super().__init__( values = None, defaults = defaults, name = 'config' )
 		self._filename = filename or CONFIG_PATH
+
+	def __enter__( self ):
+		self.__read()
+		return self
+
+	def __exit__( self, *err ):
+		self.__write()
+
+	def __read(self):
 		try:
 			with open( self._filename, 'r' ) as config_file:
 				self._values = json.load( config_file )
 		except FileNotFoundError as e:
 			print( e )
 
-
-
+	def __write(self):
+		if self._values:
+			try:
+				with open( self._filename, 'w' ) as config_file:
+					json.dump( self._values, config_file )
+			except FileNotFoundError as e:
+				print( e )
