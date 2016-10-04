@@ -4,8 +4,19 @@ class Aliases:
 	def __init__( self, config ):
 		self.config = config
 
-	def __iter__( self ):
-		return iter( dict( self.config.aliases ) )
+	def get( self, alias, default = None ):
+		try:
+			return self[alias]
+		except KeyError:
+			return default
+
+	def set( self, alias, value ):
+		self[alias] = value
+
+	def pop( self, alias ):
+		value = self[alias]
+		del self[alias]
+		return value
 
 	def __getitem__( self, alias ):
 		if alias in dict( self.config.aliases ):
@@ -24,23 +35,19 @@ class Aliases:
 	def __contains__( self, alias ):
 		return alias in self.config.aliases
 
-	def get( self, alias, default = None ):
-		try:
-			return self[alias]
-		except KeyError:
-			return default
+	def __iter__( self ):
+		return iter( dict( self.config.aliases ) )
 
-	def set( self, alias, value ):
-		self[alias] = value
-
-	def pop( self, alias ):
-		value = self[alias]
-		del self[alias]
-		return value
+	def __str__( self ):
+		aliases = list( self.config.aliases.items() )
+		aliases.sort( key = lambda x: x[0].lower() )
+		width = max( len( x ) for x, y in aliases )
+		formatted = [ (x + ( ' ' * ( width - len( x ) ) ), y) for x, y in aliases ]
+		return '\n'.join( '{} = "{}"'.format( k, v ) for k, v in formatted )
 
 
 if __name__ == '__main__':
 	from worklog.config import ConfigFile
 
 	with ConfigFile() as config:
-		print( ' '.join( Aliases( config ) ))
+		print( ' '.join( tuple( Aliases( config ) ) ) )

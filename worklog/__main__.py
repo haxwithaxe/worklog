@@ -131,6 +131,8 @@ def handle_dynamic_alias_commands( args, aliases ):
 		name = ''.join( args.remove )
 		print( 'Removing "{}" as an alias.'.format( name ) )
 		aliases.pop( name )
+	elif args.list:
+		print( aliases )
 
 
 def translate_aliases( args, parser, aliases ):
@@ -142,6 +144,7 @@ def translate_aliases( args, parser, aliases ):
 	# remove the alias specific options
 	kwargs.pop( 'add' )
 	kwargs.pop( 'remove' )
+	kwargs.pop( 'list' )
 	for option, value in kwargs.items():
 		args_kwargs.append( '--' + option )
 		args_kwargs.append( value )
@@ -218,6 +221,7 @@ def _add_alias_command( sub_parser, common_parser, command_aliases ):
 	_description( alias_parser )
 	alias_parser.add_argument( '--add', metavar = 'ALIAS', nargs = 1 )
 	alias_parser.add_argument( '--del', dest = 'remove', metavar = 'ALIAS', nargs = 1 )
+	alias_parser.add_argument( '--list', default = False, action = 'store_true' )
 
 
 def main( config ):
