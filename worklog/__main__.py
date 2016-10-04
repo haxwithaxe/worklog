@@ -134,43 +134,63 @@ def handle_dynamic_alias_commands( args, aliases ):
 
 
 def translate_aliases( args, parser, aliases ):
-		# If an alias was passed as the command unpack the values and reparse with start as the command.
-		args_kwargs = [ 'start' ]
-		kwargs = dict( args._get_kwargs() )
-		alias_str = aliases.get( kwargs.pop( 'command' ) )
-		description = [ alias_str ] + kwargs.pop( 'description' )
-		# remove the alias specific options
-		kwargs.pop( 'add' )
-		kwargs.pop( 'remove' )
-		for option, value in kwargs.items():
-			args_kwargs.append( '--' + option )
-			args_kwargs.append( value )
-		args_kwargs.extend( description )
-		args_kwargs.extend( args._get_args() )
-		return parser.parse_args( args_kwargs )
+	# If an alias was passed as the command unpack the values and reparse with start as the command.
+	args_kwargs = [ 'start' ]
+	kwargs = dict( args._get_kwargs() )
+	alias_str = aliases.get( kwargs.pop( 'command' ) )
+	description = [ alias_str ] + kwargs.pop( 'description' )
+	# remove the alias specific options
+	kwargs.pop( 'add' )
+	kwargs.pop( 'remove' )
+	for option, value in kwargs.items():
+		args_kwargs.append( '--' + option )
+		args_kwargs.append( value )
+	args_kwargs.extend( description )
+	args_kwargs.extend( args._get_args() )
+	return parser.parse_args( args_kwargs )
+
+
+def _description(sub_parser):
+	sub_parser.add_argument(
+			'description',
+			default = None,
+			metavar = 'DESCRIPTION',
+			nargs = argparse.REMAINDER,
+			help = "specify the task's description on the command line"
+			)
+
+
+def _ticket(sub_parser):
+	sub_parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
+
+def _at(sub_parser):
+	sub_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
+
+def _ago(sub_parser):
+	sub_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
 
 
 def _add_start_command( sub_parser, common_parser ):
 	blurb = 'start a new task, closing the currently open task if any'
 	start_parser = sub_parser.add_parser( 'start', help = blurb, description = blurb, parents = [ common_parser ] )
-	start_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
-	start_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
-	start_parser.add_argument( '-t', '--ticket', metavar = 'TICKET', help = 'the TICKET associated with the task' )
-	start_parser.add_argument( 'description', metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
+	_at( start_parser )
+	_ago( start_parser )
+	_ticket( start_parser )
+	_description( start_parser )
 
 
 def _add_resume_command( sub_parser, common_parser ):
 	blurb = 'like start, but reuse the description from a previous task in this worklog by seleting it from a list'
 	resume_parser = sub_parser.add_parser( 'resume', help = blurb, description = blurb, parents = [ common_parser ] )
-	resume_parser.add_argument( '--ago', metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
-	resume_parser.add_argument( '--at', metavar = 'TIME', help = 'start the task at TIME, instead of now' )
+	_at( resume_parser )
+	_ago( resume_parser )
 
 
 def _add_stop_command( sub_parser, common_parser ):
 	blurb = 'close the currently open task'
 	stop_parser = sub_parser.add_parser( 'stop', help = blurb, description = blurb, parents = [ common_parser ] )
-	stop_parser.add_argument( '--ago', metavar = 'DURATION', help = 'close the open task DURATION time ago, instead of now' )
-	stop_parser.add_argument( '--at', metavar = 'TIME', help = 'close the open task at TIME, instead of now' )
+	_at( stop_parser )
+	_ago( stop_parser )
 
 
 def _add_report_command( sub_parser, common_parser ):
@@ -180,18 +200,24 @@ def _add_report_command( sub_parser, common_parser ):
 
 def _add_upload_command( sub_parser, common_parser ):
 	blurb = 'uploads worklog time to jira'
-	upload_parser = sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
+	sub_parser.add_parser( 'upload', help = blurb, description = blurb, parents = [ common_parser ] )
 
 
 def _add_alias_command( sub_parser, common_parser, command_aliases ):
-	blurb = 'short cut to "start <alias>"'
-	alias_parser = sub_parser.add_parser( 'alias', aliases = command_aliases, help = blurb, description = blurb, parents = [ common_parser ] )
-	alias_parser.add_argument( '--ago', default = None, metavar = 'DURATION', help = 'start the task DURATION time ago, instead of now' )
-	alias_parser.add_argument( '--at', default = None, metavar = 'TIME', help = 'start the task at TIME, instead of now' )
-	alias_parser.add_argument( '-t', '--ticket', default = None, metavar = 'TICKET', help = 'the TICKET associated with the task' )
+	blurb = 'short cut to "start <alias>" or add/remove aliases'
+	alias_parser = sub_parser.add_parser( 
+			'alias',
+			aliases = command_aliases,
+			help = blurb,
+			description = blurb,
+			parents = [ common_parser ]
+			)
+	_ago( alias_parser )
+	_at( alias_parser )
+	_ticket( alias_parser )
+	_description( alias_parser )
 	alias_parser.add_argument( '--add', metavar = 'ALIAS', nargs = 1 )
-	alias_parser.add_argument( '--del', dest='remove', metavar = 'ALIAS', nargs = 1 )
-	alias_parser.add_argument( 'description', default = None, metavar = 'DESCRIPTION', nargs = argparse.REMAINDER, help = "specify the task's description on the command line" )
+	alias_parser.add_argument( '--del', dest = 'remove', metavar = 'ALIAS', nargs = 1 )
 
 
 def main( config ):
@@ -199,14 +225,20 @@ def main( config ):
 	command_aliases = tuple( aliases )
 	parser = argparse.ArgumentParser(
 		prog = 'worklog',
-		description = "manage and report time allocation",
+		description = "Manage and report time allocation",
 		formatter_class = argparse.RawDescriptionHelpFormatter,
 		epilog = EPILOG
 	)
 	sub_parser = parser.add_subparsers( dest = 'command' )
 	common_parser = argparse.ArgumentParser( add_help = False )
 	common_parser.add_argument( '--day', '-d', help = 'manage the worklog for DATE, defaults to today' )
-	for add_parser in ( _add_start_command, _add_resume_command, _add_stop_command, _add_report_command, _add_upload_command ):
+	for add_parser in (
+			_add_start_command,
+			_add_resume_command,
+			_add_stop_command,
+			_add_report_command,
+			_add_upload_command
+			):
 		add_parser( sub_parser, common_parser )
 	_add_alias_command( sub_parser, common_parser, command_aliases )
 
