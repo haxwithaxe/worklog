@@ -139,6 +139,9 @@ def translate_aliases( args, parser, aliases ):
 		kwargs = dict( args._get_kwargs() )
 		alias_str = aliases.get( kwargs.pop( 'command' ) )
 		description = [ alias_str ] + kwargs.pop( 'description' )
+		# remove the alias specific options
+		kwargs.pop( 'add' )
+		kwargs.pop( 'remove' )
 		for option, value in kwargs.items():
 			args_kwargs.append( '--' + option )
 			args_kwargs.append( value )
@@ -212,7 +215,7 @@ def main( config ):
 
 	if args.command == 'alias':
 		handle_dynamic_alias_commands( args, aliases )
-		return None
+		raise Abort()
 	elif args.command in command_aliases:
 		args = translate_aliases( args, parser, aliases )
 	try:
