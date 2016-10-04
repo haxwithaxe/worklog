@@ -13,6 +13,15 @@ class Config:
 		self._defaults = defaults or {}
 		self.name = name
 
+	def __setitem__( self, item, value ):
+		# unpack Config objects so json can handle them
+		if isinstance( value , Config ):
+			value = dict( value )
+		self._values[item] = value
+
+	def __getitem__( self, item ):
+		return self._values[item]
+
 	def __iter__( self ):
 		return iter( tuple( self._values.items() ) )
 
@@ -46,14 +55,14 @@ class ConfigFile( Config ):
 	def __exit__( self, *err ):
 		self.__write()
 
-	def __read(self):
+	def __read( self ):
 		try:
 			with open( self._filename, 'r' ) as config_file:
 				self._values = json.load( config_file )
 		except FileNotFoundError as e:
 			print( e )
 
-	def __write(self):
+	def __write( self ):
 		if self._values:
 			try:
 				with open( self._filename, 'w' ) as config_file:
