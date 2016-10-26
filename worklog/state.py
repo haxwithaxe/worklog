@@ -186,10 +186,13 @@ class Worklog( MutableSequence ):
 
 
 	def dump( self ):
+		kwargs = {}
+		if self.config.features.get( 'pretty-print' ):
+			kwargs = { 'sort_keys': True, 'indent': 4 }
 		state = self.__getstate__()
 		if state:
 			with open(self.filename, 'w') as file_handle:
-				json.dump( state, file_handle )
+				json.dump( state, file_handle, **kwargs )
 
 
 	def __getstate__( self ):

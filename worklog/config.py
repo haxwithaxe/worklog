@@ -66,6 +66,6 @@ class ConfigFile( Config ):
 		if self._values:
 			try:
 				with open( self._filename, 'w' ) as config_file:
-					json.dump( self._values, config_file )
+					json.dump( self._values, config_file, sort_keys = True, indent = 4 )
 			except FileNotFoundError as e:
 				print( e )
